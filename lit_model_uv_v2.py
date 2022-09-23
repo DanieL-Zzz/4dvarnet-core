@@ -1,36 +1,42 @@
-import einops
-import hydra
-import torch.distributed as dist
-import kornia
-from hydra.utils import instantiate
-import pandas as pd
-from functools import reduce
-from torch.nn.modules import loss
-import xarray as xr
+"""
+Model description...
+"""
+
 from pathlib import Path
-from hydra.utils import call
+
+import hydra
+from hydra.utils import call, instantiate
+import kornia
 import numpy as np
-import pytorch_lightning as pl
-import torch
-import torch.nn.functional as F
-import torch.optim as optim
 from omegaconf import OmegaConf
-from scipy import stats
-import solver as NN_4DVar
-import metrics
-from metrics import save_netcdf,save_netcdf_with_obs,save_netcdf_uv, nrmse, nrmse_scores, mse_scores, plot_nrmse, plot_mse, plot_snr, plot_maps, animate_maps, get_psd_score
-from models import Model_H, Model_HwithSST, Model_HwithSSTBN,Phi_r, ModelLR, Gradient_img, Model_HwithSSTBN_nolin_tanh, Model_HwithSST_nolin_tanh, Model_HwithSSTBNandAtt
-from models import Model_HwithSSTBNAtt_nolin_tanh
-
-
+import pandas as pd
+import pytorch_lightning as pl
 from scipy import ndimage
 from scipy.ndimage import gaussian_filter
+import torch
+import torch.distributed as dist
+import torch.nn.functional as F
+import torch.optim as optim
+import xarray as xr
 
-def compute_coriolis_force(lat,flag_mean_coriolis=False):
-    omega = 7.2921e-5 # rad/s
+import metrics
+from metrics import (
+    animate_maps, get_psd_score, plot_maps, plot_nrmse, plot_snr,
+    save_netcdf_uv,
+)
+from models import (
+    Model_HwithSST_nolin_tanh, ModelLR, Model_H, Model_HwithSST,
+    Model_HwithSSTBN, Model_HwithSSTBNAtt_nolin_tanh,
+    Model_HwithSSTBN_nolin_tanh, Model_HwithSSTBNandAtt, Phi_r,
+)
+import solver as NN_4DVar
+
+
+def compute_coriolis_force(lat, flag_mean_coriolis=False):
+    omega = 7.2921e-5  # angular speed (rad/s)
     f = 2 * omega * np.sin(lat)
 
-    if flag_mean_coriolis == True :
+    if flag_mean_coriolis:
         f = np.mean(f) * np.ones((f.shape))
 
     return f
