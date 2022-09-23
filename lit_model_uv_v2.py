@@ -19,6 +19,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 import xarray as xr
 
+# NOTE Some local variables in this file are also named "metrics", maybe
+# we should rename them or add an alias to this import.
 import metrics
 from metrics import (
     animate_maps, get_psd_score, plot_maps, plot_nrmse, plot_snr,
@@ -41,32 +43,36 @@ def compute_coriolis_force(lat, flag_mean_coriolis=False):
 
     return f
 
-def compute_uv_geo_with_coriolis(ssh,lat,lon,sigma=0.5,alpha_uv_geo = 1.,flag_mean_coriolis=False):
 
+def compute_uv_geo_with_coriolis(
+    ssh, lat, lon, sigma=0.5, alpha_uv_geo=1., flag_mean_coriolis=False,
+):
     dlat = lat[1] - lat[0]
     dlon = lon[1] - lon[0]
 
     # coriolis / lat/lon scaling
-    grid_lat = lat.reshape( (1,ssh.shape[1],1))
-    grid_lat = np.tile( grid_lat , (ssh.shape[0],1,ssh.shape[2]) )
-    grid_lon = lon.reshape( (1,1,ssh.shape[2]))
-    grid_lon = np.tile( grid_lon , (ssh.shape[0],ssh.shape[1],1) )
+    grid_lat = lat.reshape((1, ssh.shape[1], 1))
+    grid_lat = np.tile(grid_lat, (ssh.shape[0], 1, ssh.shape[2]))
+    grid_lon = lon.reshape((1, 1, ssh.shape[2]))
+    grid_lon = np.tile(grid_lon, (ssh.shape[0], ssh.shape[1], 1))
 
-    f_c = compute_coriolis_force(grid_lat,flag_mean_coriolis=flag_mean_coriolis)
-    dx_from_dlon , dy_from_dlat = compute_dx_dy_dlat_dlon(grid_lat,grid_lon,dlat,dlon)
+    f_c = compute_coriolis_force(
+        grid_lat, flag_mean_coriolis=flag_mean_coriolis,
+    )
+    dx_from_dlon, dy_from_dlat = compute_dx_dy_dlat_dlon(
+        grid_lat, grid_lon, dlat, dlon,
+    )
 
-    # (u,v) MSE
+    # (u, v) MSE
     ssh = gaussian_filter(ssh, sigma=sigma)
-    dssh_dx = compute_gradx( ssh )
-    dssh_dy = compute_grady( ssh )
+    dssh_dx = compute_gradx(ssh)
+    dssh_dy = compute_grady(ssh)
 
-    if 1*1 :
-        dssh_dx = dssh_dx / dx_from_dlon
-        dssh_dy = dssh_dy / dy_from_dlat
+    dssh_dx = dssh_dx / dx_from_dlon
+    dssh_dy = dssh_dy / dy_from_dlat
 
-    if 1*1 :
-         dssh_dy = ( 1. / f_c ) * dssh_dy
-         dssh_dx = ( 1. / f_c  )* dssh_dx
+    dssh_dy = (1. / f_c) * dssh_dy
+    dssh_dx = (1. / f_c) * dssh_dx
 
     u_geo = -1. * dssh_dy
     v_geo = 1. * dssh_dx
@@ -74,77 +80,88 @@ def compute_uv_geo_with_coriolis(ssh,lat,lon,sigma=0.5,alpha_uv_geo = 1.,flag_me
     u_geo = alpha_uv_geo * u_geo
     v_geo = alpha_uv_geo * v_geo
 
-    return u_geo,v_geo
+    return u_geo, v_geo
 
-def compute_dx_dy_dlat_dlon(lat,lon,dlat,dlon):
 
-    def compute_c(lat,lon,dlat,dlon):
-        a = np.sin(dlat / 2)**2 + np.cos(lat) ** 2 * np.sin(dlon / 2)**2
-        return 2 * 6.371e6 * np.arctan2( np.sqrt(a), np.sqrt(1. - a))
-        #return 1. * np.arctan2( np.sqrt(a), np.sqrt(1. - a))
+def compute_dx_dy_dlat_dlon(lat, lon, dlat, dlon):
+    def compute_c(lat, lon, dlat, dlon):
+        a = np.sin(dlat / 2)**2 + np.cos(lat)**2 * np.sin(dlon/2)**2
 
-    dy_from_dlat =  compute_c(lat,lon,dlat,0.)
-    dx_from_dlon =  compute_c(lat,lon,0.,dlon)
+        return 2 * 6.371e6 * np.arctan2(np.sqrt(a), np.sqrt(1. - a))
 
-    return dx_from_dlon , dy_from_dlat
+    dy_from_dlat = compute_c(lat, lon, dlat, 0.)
+    dx_from_dlon = compute_c(lat, lon, 0., dlon)
 
-def compute_gradx( u, alpha_dx = 1., sigma = 0. , _filter='diff-non-centered'):
-    if sigma > 0. :
-        u = gaussian_filter(u, sigma=sigma)
-    if _filter == 'sobel' :
-        return alpha_dx * ndimage.sobel(u,axis=2)
-    elif _filter == 'diff-non-centered' :
-        return alpha_dx * ndimage.convolve1d(u,weights=[0.3,0.4,-0.7],axis=2)
+    return dx_from_dlon, dy_from_dlat
 
-def compute_grady( u, alpha_dy= 1., sigma = 0., _filter='diff-non-centered' ):
 
-    if sigma > 0. :
+def _compute_grad(axis, u, alpha_d=1., sigma=0., _filter='diff-non-centered'):
+    if sigma > 0.:
         u = gaussian_filter(u, sigma=sigma)
 
-    if _filter == 'sobel' :
-         return alpha_dy * ndimage.sobel(u,axis=1)
-    elif _filter == 'diff-non-centered' :
-        return alpha_dy * ndimage.convolve1d(u,weights=[0.3,0.4,-0.7],axis=1)
+    if _filter == 'sobel':
+        return alpha_d * ndimage.sobel(u, axis=axis)
+    elif _filter == 'diff-non-centered':
+        return alpha_d * ndimage.convolve1d(u, weights=[.3, .4, -.7], axis=axis)
+    else:
+        raise ValueError(f'Invalid argument: _filter={_filter}')
 
-def compute_div(u,v,sigma=1.0,alpha_dx=1.,alpha_dy=1.):
-    du_dx = compute_gradx( u , alpha_dx = alpha_dx , sigma = sigma )
-    dv_dy = compute_grady( v , alpha_dy = alpha_dy , sigma = sigma )
+
+def compute_gradx(u, alpha_dx=1., sigma=0., _filter='diff-non-centered'):
+    return _compute_grad(
+        axis=2, u=u, alpha_d=alpha_dx, sigma=sigma, _filter=_filter,
+    )
+
+
+def compute_grady(u, alpha_dy=1., sigma=0., _filter='diff-non-centered'):
+    return _compute_grad(
+        axis=1, u=u, alpha_d=alpha_dy, sigma=sigma, _filter=_filter,
+    )
+
+
+def compute_div(u, v, sigma=1., alpha_dx=1., alpha_dy=1.):
+    du_dx = compute_gradx(u, alpha_dx=alpha_dx, sigma=sigma)
+    dv_dy = compute_grady(v, alpha_dy=alpha_dy, sigma=sigma)
 
     return du_dx + dv_dy
 
-def compute_curl(u,v,sigma=1.0,alpha_dx=1.,alpha_dy=1.):
-    du_dy = compute_grady( u , alpha_dy = alpha_dy , sigma = sigma )
-    dv_dx = compute_gradx( v , alpha_dx = alpha_dx , sigma = sigma )
+
+def compute_curl(u, v, sigma=1., alpha_dx=1., alpha_dy=1.):
+    du_dy = compute_grady(u, alpha_dy=alpha_dy, sigma=sigma)
+    dv_dx = compute_gradx(v, alpha_dx=alpha_dx, sigma=sigma)
 
     return du_dy - dv_dx
 
-def compute_strain(u,v,sigma=1.0,alpha_dx=1.,alpha_dy=1.):
-    du_dx = compute_gradx( u , alpha_dx = alpha_dx , sigma = sigma )
-    dv_dy = compute_grady( v , alpha_dy = alpha_dy , sigma = sigma )
 
-    du_dy = compute_grady( u , alpha_dy = alpha_dy , sigma = sigma )
-    dv_dx = compute_gradx( v , alpha_dx = alpha_dx , sigma = sigma )
+def compute_strain(u, v, sigma=1., alpha_dx=1., alpha_dy=1.):
+    du_dx = compute_gradx(u, alpha_dx=alpha_dx, sigma=sigma)
+    dv_dy = compute_grady(v, alpha_dy=alpha_dy, sigma=sigma)
 
-    return np.sqrt( ( dv_dx + du_dy ) **2 +  (du_dx - dv_dy) **2 )
+    du_dy = compute_grady(u, alpha_dy=alpha_dy, sigma=sigma)
+    dv_dx = compute_gradx(v, alpha_dx=alpha_dx, sigma=sigma)
+
+    return np.sqrt((dv_dx + du_dy)**2 + (du_dx - dv_dy)**2)
 
 
-def compute_div_curl_strain_with_lat_lon(u,v,lat,lon,sigma=1.0):
+def compute_div_curl_strain_with_lat_lon(u, v, lat, lon, sigma=1.):
     dlat = lat[1] - lat[0]
     dlon = lon[1] - lon[0]
 
     # coriolis / lat/lon scaling
-    grid_lat = lat.reshape( (1,u.shape[1],1))
-    grid_lat = np.tile( grid_lat , (v.shape[0],1,v.shape[2]) )
-    grid_lon = lon.reshape( (1,1,v.shape[2]))
-    grid_lon = np.tile( grid_lon , (v.shape[0],v.shape[1],1) )
+    grid_lat = lat.reshape((1, u.shape[1], 1))
+    grid_lat = np.tile(grid_lat, (v.shape[0], 1, v.shape[2]))
+    grid_lon = lon.reshape((1, 1, v.shape[2]))
+    grid_lon = np.tile(grid_lon, (v.shape[0], v.shape[1], 1))
 
-    dx_from_dlon , dy_from_dlat = compute_dx_dy_dlat_dlon(grid_lat,grid_lon,dlat,dlon)
+    dx_from_dlon, dy_from_dlat = compute_dx_dy_dlat_dlon(
+        grid_lat, grid_lon, dlat, dlon,
+    )
 
-    du_dx = compute_gradx( u , sigma = sigma )
-    dv_dy = compute_grady( v , sigma = sigma )
+    du_dx = compute_gradx(u, sigma=sigma)
+    dv_dy = compute_grady(v, sigma=sigma)
 
-    du_dy = compute_grady( u , sigma = sigma )
-    dv_dx = compute_gradx( v , sigma = sigma )
+    du_dy = compute_grady(u, sigma=sigma)
+    dv_dx = compute_gradx(v, sigma=sigma)
 
     du_dx = du_dx / dx_from_dlon
     dv_dx = dv_dx / dx_from_dlon
@@ -152,152 +169,163 @@ def compute_div_curl_strain_with_lat_lon(u,v,lat,lon,sigma=1.0):
     du_dy = du_dy / dy_from_dlat
     dv_dy = dv_dy / dy_from_dlat
 
-    strain = np.sqrt( ( dv_dx + du_dy ) **2 + (du_dx - dv_dy) **2 )
+    strain = np.sqrt((dv_dx + du_dy)**2 + (du_dx - dv_dy)**2)
 
     div = du_dx + dv_dy
     curl =  du_dy - dv_dx
 
-    return div,curl,strain#,dx_from_dlon , dy_from_dlat
-    #return div,curl,strain, np.abs(du_dx) , np.abs(du_dy)
+    return div, curl, strain
 
-class Torch_compute_derivatives_with_lon_lat(torch.nn.Module):
-    def __init__(self,dT=7,_filter='diff-non-centered'):
-        super(Torch_compute_derivatives_with_lon_lat, self).__init__()
 
+class TorchComputeDerivativesWithLonLat(torch.nn.Module):
+    def __init__(self, dT=7, _filter='diff-non-centered'):
+        super().__init__()
+
+        # Initialise convGx and convGy parameters according to the filter
         if _filter == 'sobel':
             a = np.array([[1., 0., -1.], [2., 0., -2.], [1., 0., -1.]])
-            self.convGx = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False,padding_mode='reflect')
-            with torch.no_grad():
-                self.convGx.weight = torch.nn.Parameter(torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
-
             b = np.array([[1., 2., 1.], [0., 0., 0.], [-1., -2., -1.]])
-            self.convGy = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False,padding_mode='reflect')
-            with torch.no_grad():
-                self.convGy.weight = torch.nn.Parameter(torch.from_numpy(b).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
         elif _filter == 'diff-non-centered':
-            #a = np.array([[0., 0., 0.], [0.3, 0.4, -0.7], [0., 0., 0.]])
-            a = np.array([[0., 0., 0.], [-0.7, 0.4, 0.3], [0., 0., 0.]])
-
-            self.convGx = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False,padding_mode='reflect')
-            with torch.no_grad():
-                self.convGx.weight = torch.nn.Parameter(torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
-            #b = np.array([[0., 0.3, 0.], [0., 0.4, 0.], [0., -0.7, 0.]])
+            a = np.array([[0., 0., 0.], [-.7, .4, .3], [0., 0., 0.]])
             b = np.transpose(a)
-
-            self.convGy = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False,padding_mode='reflect')
-            with torch.no_grad():
-                self.convGy.weight = torch.nn.Parameter(torch.from_numpy(b).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
-        elif filter == 'diff':
+        elif _filter == 'diff':
             a = np.array([[0., 0., 0.], [0., 1., -1.], [0., 0., 0.]])
-            self.convGx = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False,padding_mode='reflect')
-            with torch.no_grad():
-                self.convGx.weight = torch.nn.Parameter(torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
             b = np.array([[0., 0.3, 0.], [0., 1., 0.], [0., -1., 0.]])
-            self.convGy = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False,padding_mode='reflect')
-            with torch.no_grad():
-                self.convGy.weight = torch.nn.Parameter(torch.from_numpy(b).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
+        else:
+            raise ValueError(f'Invalid argument: _filter={_filter}')
 
-        a = np.array([[0., 0.25, 0.], [0.25, 0., 0.25], [0., 0.25, 0.]])
-        self.heat_filter = torch.nn.Conv2d(dT, dT, kernel_size=3, padding=1, bias=False,padding_mode='reflect')
+        self.convGx = torch.nn.Conv2d(
+            1, 1, kernel_size=3, stride=1, padding=1, bias=False,
+            padding_mode='reflect',
+        )
+        self.convGy = torch.nn.Conv2d(
+            1, 1, kernel_size=3, stride=1, padding=1, bias=False,
+            padding_mode='reflect',
+        )
+
         with torch.no_grad():
-            self.heat_filter.weight = torch.nn.Parameter(torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
+            self.convGx.weight = torch.nn.Parameter(
+                torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0),
+                requires_grad=False,
+            )
+            self.convGy.weight = torch.nn.Parameter(
+                torch.from_numpy(b).float().unsqueeze(0).unsqueeze(0),
+                requires_grad=False,
+            )
 
-        a = np.array([[0., 0.25, 0.], [0.25, 0., 0.25], [0., 0.25, 0.]])
-        self.heat_filter_all_channels = torch.nn.Conv2d(dT, dT, kernel_size=3, groups=dT, padding=1, bias=False,padding_mode='reflect')
+        # Initialise heat_filter and heat_filter_all_channels parameters
+        a = np.array([[0., .25, 0.], [.25, 0., .25], [0., .25, 0.]])
+        self.heat_filter = torch.nn.Conv2d(
+            dT, dT, kernel_size=3, padding=1, bias=False,
+            padding_mode='reflect',
+        )
         with torch.no_grad():
-            a = np.tile(a,(dT,1,1,1))
-            self.heat_filter_all_channels.weight = torch.nn.Parameter(torch.from_numpy(a).float(), requires_grad=False)
+            self.heat_filter.weight = torch.nn.Parameter(
+                torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0),
+                requires_grad=False,
+            )
 
-        self.eps = 1e-10#torch.Tensor([1.*1e-10])
+        a = np.array([[0., .25, 0.], [.25, 0., .25], [0., .25, 0.]])
+        self.heat_filter_all_channels = torch.nn.Conv2d(
+            dT, dT, kernel_size=3, groups=dT, padding=1, bias=False,
+            padding_mode='reflect',
+        )
+        with torch.no_grad():
+            a = np.tile(a, (dT, 1, 1, 1))
+            self.heat_filter_all_channels.weight = torch.nn.Parameter(
+                torch.from_numpy(a).float(), requires_grad=False,
+            )
 
-    def compute_c(self,lat,lon,dlat,dlon):
+        self.eps = 1e-10
 
-        a = torch.sin(dlat / 2. )**2 + torch.cos(lat) ** 2 * torch.sin( dlon / 2. )**2
+    def compute_c(self, lat, lon, dlat, dlon):
+        a = (
+            torch.sin(dlat/2.)**2 + torch.cos(lat)**2 * torch.sin(dlon/2.)**2
+        )
 
-        c = 2. * 6.371e6 * torch.atan2( torch.sqrt(a + self.eps), torch.sqrt(1. - a + self.eps ))
-        #c = c.type(torch.cuda.FloatTensor)
+        c = 2. * 6.371e6 * torch.atan2(
+            torch.sqrt(a + self.eps), torch.sqrt(1. - a + self.eps),
+        )
 
         return c
-        #return 2. * 6.371 * torch.atan2( torch.sqrt(a + self.eps), torch.sqrt(1. - a + self.eps ))
 
-    def compute_dx_dy_dlat_dlon(self,lat,lon,dlat,dlon):
+    def compute_dx_dy_dlat_dlon(self, lat, lon, dlat, dlon):
+        dy_from_dlat = self.compute_c(lat, lon, dlat, 0.*dlon)
+        dx_from_dlon = self.compute_c(lat, lon, 0.*dlat, dlon)
 
-        dy_from_dlat =  self.compute_c(lat,lon,dlat,0.*dlon)
-        dx_from_dlon =  self.compute_c(lat,lon,0.*dlat,dlon)
+        return dx_from_dlon, dy_from_dlat
 
-        return dx_from_dlon , dy_from_dlat
+    def _compute_grad(self, convG, u, sigma):
+        if sigma > 0.:
+            u = kornia.filters.gaussian_blur2d(
+                u, (5, 5), (sigma, sigma), border_type='reflect',
+            )
 
-    def compute_gradx(self,u,sigma=0.):
+        grad = convG(u.view(-1, 1, u.size(2), u.size(3)))
+        grad = grad.view(-1, u.size(1), u.size(2), u.size(3))
 
-        if sigma > 0. :
-            u = kornia.filters.gaussian_blur2d(u, (5,5), (sigma,sigma), border_type='reflect')
+        return grad
 
-        G_x = self.convGx(u.view(-1, 1, u.size(2), u.size(3)))
-        G_x = G_x.view(-1,u.size(1), u.size(2), u.size(3))
+    def compute_gradx(self, u, sigma=0.):
+        return self._compute_grad(self.convGx, u, sigma)
 
-        return G_x
+    def compute_grady(self, u, sigma=0.):
+        return self._compute_grad(self.convGy, u, sigma)
 
-    def compute_grady(self,u,sigma=0.):
-        if sigma > 0. :
-            u = kornia.filters.gaussian_blur2d(u, (5,5), (sigma,sigma), border_type='reflect')
+    def compute_gradxy(self, u, sigma=0.):
+        if sigma > 0.:
+            u = kornia.filters.gaussian_blur2d(
+                u, (3, 3), (sigma, sigma), border_type='reflect',
+            )
 
-        G_y = self.convGy(u.view(-1, 1, u.size(2), u.size(3)))
-        G_y = G_y.view(-1,u.size(1), u.size(2), u.size(3))
+        G_x  = self.convGx(u[:, 0, :, :].view(-1, 1, u.size(2), u.size(3)))
+        G_y  = self.convGy(u[:, 0, :, :].view(-1, 1, u.size(2), u.size(3)))
 
-        return G_y
+        for kk in range(1, u.size(1)):
+            _G_x = self.convGx(u[:, kk, :, :].view(-1, 1, u.size(2), u.size(3)))
+            _G_y = self.convGy(u[:, kk, :, :].view(-1, 1, u.size(2), u.size(3)))
 
-    def compute_gradxy(self,u,sigma=0.):
+            G_x = torch.cat((G_x, _G_x), dim = 1)
+            G_y = torch.cat((G_y, _G_y), dim = 1)
 
-        if sigma > 0. :
-            u = kornia.filters.gaussian_blur2d(u, (3,3), (sigma,sigma), border_type='reflect')
+        return G_x, G_y
 
-        G_x  = self.convGx( u[:,0,:,:].view(-1,1,u.size(2), u.size(3)) )
-        G_y  = self.convGy( u[:,0,:,:].view(-1,1,u.size(2), u.size(3)) )
-
-        for kk in range(1,u.size(1)):
-            _G_x  = self.convGx( u[:,kk,:,:].view(-1,1,u.size(2), u.size(3)) )
-            _G_y  = self.convGy( u[:,kk,:,:].view(-1,1,u.size(2), u.size(3)) )
-
-            G_x  = torch.cat( (G_x,_G_x) , dim = 1 )
-            G_y  = torch.cat( (G_y,_G_y) , dim = 1 )
-
-        return G_x,G_y
-
-    def compute_coriolis_force(self,lat,flag_mean_coriolis=False):
-        omega = 7.2921e-5 # rad/s
+    def compute_coriolis_force(self, lat, flag_mean_coriolis=False):
+        omega = 7.2921e-5  # angular speed (rad/s)
         f = 2 * omega * torch.sin(lat)
 
-        if flag_mean_coriolis == True :
+        if flag_mean_coriolis:
             f = torch.mean(f) * torch.ones((f.size()))
-
-        #f = f.type(torch.cuda.FloatTensor)
 
         return f
 
-    def compute_geo_velocities(self,ssh,lat,lon,sigma=0.,alpha_uv_geo=9.81,flag_mean_coriolis=False):
-
-        dlat = lat[0,1]-lat[0,0]
-        dlon = lon[0,1]-lon[0,0]
+    def compute_geo_velocities(
+        self, ssh, lat, lon, sigma=0., alpha_uv_geo=9.81,
+        flag_mean_coriolis=False,
+    ):
+        dlat = lat[0, 1] - lat[0, 0]
+        dlon = lon[0, 1] - lon[0, 0]
 
         # coriolis / lat/lon scaling
-        grid_lat = lat.view(ssh.size(0),1,ssh.size(2),1)
-        grid_lat = grid_lat.repeat(1,ssh.size(1),1,ssh.size(3))
-        grid_lon = lon.view(ssh.size(0),1,1,ssh.size(3))
-        grid_lon = grid_lon.repeat(1,ssh.size(1),ssh.size(2),1)
+        grid_lat = lat.view(ssh.size(0), 1, ssh.size(2), 1)
+        grid_lat = grid_lat.repeat(1, ssh.size(1), 1, ssh.size(3))
+        grid_lon = lon.view(ssh.size(0), 1, 1, ssh.size(3))
+        grid_lon = grid_lon.repeat(1, ssh.size(1), ssh.size(2), 1)
 
-        dx_from_dlon , dy_from_dlat = self.compute_dx_dy_dlat_dlon(grid_lat,grid_lon,dlat,dlon)
-        f_c = self.compute_coriolis_force(grid_lat,flag_mean_coriolis=flag_mean_coriolis)
+        dx_from_dlon, dy_from_dlat = self.compute_dx_dy_dlat_dlon(
+            grid_lat, grid_lon, dlat, dlon,
+        )
+        f_c = self.compute_coriolis_force(
+            grid_lat, flag_mean_coriolis=flag_mean_coriolis,
+        )
 
-        dssh_dx , dssh_dy = self.compute_gradxy( ssh , sigma=sigma )
-
-        #print(' dssh_dy %f '%torch.mean( torch.abs(dssh_dy)).detach().cpu().numpy() )
-        #print(' dssh_dx %f '%torch.mean( torch.abs(dssh_dx)).detach().cpu().numpy() )
+        dssh_dx, dssh_dy = self.compute_gradxy(ssh, sigma=sigma)
 
         dssh_dx = dssh_dx / dx_from_dlon
         dssh_dy = dssh_dy / dy_from_dlat
 
-        dssh_dy = ( 1. / f_c ) * dssh_dy
-        dssh_dx = ( 1. / f_c  )* dssh_dx
+        dssh_dy = (1. / f_c) * dssh_dy
+        dssh_dx = (1. / f_c) * dssh_dx
 
         u_geo = -1. * dssh_dy
         v_geo = 1. * dssh_dx
@@ -305,86 +333,106 @@ class Torch_compute_derivatives_with_lon_lat(torch.nn.Module):
         u_geo = alpha_uv_geo * u_geo
         v_geo = alpha_uv_geo * v_geo
 
+        return u_geo, v_geo
 
-        return u_geo,v_geo
-
-    def heat_equation_one_channel(self,ssh,mask=None,iter=5,lam=0.2):
-        out = torch.clone( ssh )
-        for kk in range(0,iter):
+    def heat_equation_one_channel(self, ssh, mask=None, iter=5, lam=0.2):
+        out = torch.clone(ssh)
+        for _ in range(iter):
             if mask is not None :
-                _d = out - mask * self.heat_filter(out)
+                _d = out - mask*self.heat_filter(out)
             else:
                 _d = out - self.heat_filter(out)
-            out -= lam * _d
+            out -= lam*_d
         return out
 
-    def heat_equation_all_channels(self,ssh,mask=None,iter=5,lam=0.2):
+    def heat_equation_all_channels(self, ssh, mask=None, iter=5, lam=0.2):
         out = 1. * ssh
-        for kk in range(0,iter):
+        for _ in range(iter):
             if mask is not None :
-                _d = out - mask * self.heat_filter_all_channels(out)
+                _d = out - mask*self.heat_filter_all_channels(out)
             else:
                 _d = out - self.heat_filter_all_channels(out)
-            out = out - lam * _d
+            out = out - lam*_d
         return out
 
-    def heat_equation(self,u,mask=None,iter=5,lam=0.2):
-
-        if mask is not None :
-            out = self.heat_equation_one_channel(u[:,0,:,:].view(-1,1,u.size(2), u.size(3)),mask[:,0,:,:].view(-1,1,u.size(2), u.size(3)),iter=iter,lam=lam)
+    def heat_equation(self, u, mask=None, iter=5, lam=0.2):
+        if mask:
+            out = self.heat_equation_one_channel(
+                u[:, 0, :, :].view(-1, 1, u.size(2), u.size(3)),
+                mask[:, 0, :, :].view(-1, 1, u.size(2), u.size(3)),
+                iter=iter, lam=lam,
+            )
         else:
-            out = self.heat_equation_one_channel(u[:,0,:,:].view(-1,1,u.size(2),u.size(3)), iter=iter,lam=lam)
+            out = self.heat_equation_one_channel(
+                u[:, 0, :, :].view(-1, 1, u.size(2), u.size(3)),
+                iter=iter, lam=lam,
+            )
 
-        for kk in range(1,u.size(1)):
-            if mask is not None :
-                _out = self.heat_equation_one_channel(u[:,kk,:,:].view(-1,1,u.size(2),mask[:,kk,:,:].view(-1,1,u.size(2), u.size(3)), u.size(3)),iter=iter,lam=lam)
+        for k in range(1, u.size(1)):
+            if mask:
+                mask_view = mask[:, k, :, :].view(-1, 1, u.size(2), u.size(3))
+
+                _out = self.heat_equation_one_channel(
+                    u[:, k, :, :].view(-1, 1, u.size(2), mask_view, u.size(3)),
+                    iter=iter, lam=lam,
+                )
             else:
-                _out = self.heat_equation_one_channel(u[:,kk,:,:].view(-1,1,u.size(2), u.size(3)),iter=iter,lam=lam)
+                _out = self.heat_equation_one_channel(
+                    u[:, k, :, :].view(-1, 1, u.size(2), u.size(3)),
+                    iter=iter, lam=lam,
+                )
 
-            out  = torch.cat( (out,_out) , dim = 1 )
+            out = torch.cat((out, _out), dim=1)
 
         return out
 
-    def compute_geo_factor(self,ssh,lat,lon,sigma=0.,alpha_uv_geo=9.81,flag_mean_coriolis=False):
-
-        dlat = lat[0,1]-lat[0,0]
-        dlon = lon[0,1]-lon[0,0]
+    def compute_geo_factor(
+        self, ssh, lat, lon, sigma=0., alpha_uv_geo=9.81,
+        flag_mean_coriolis=False,
+    ):
+        dlat = lat[0, 1] - lat[0, 0]
+        dlon = lon[0, 1] - lon[0, 0]
 
         # coriolis / lat/lon scaling
-        grid_lat = lat.view(ssh.size(0),1,ssh.size(2),1)
-        grid_lat = grid_lat.repeat(1,ssh.size(1),1,ssh.size(3))
-        grid_lon = lon.view(ssh.size(0),1,1,ssh.size(3))
-        grid_lon = grid_lon.repeat(1,ssh.size(1),ssh.size(2),1)
+        grid_lat = lat.view(ssh.size(0), 1, ssh.size(2), 1)
+        grid_lat = grid_lat.repeat(1, ssh.size(1), 1, ssh.size(3))
+        grid_lon = lon.view(ssh.size(0), 1, 1, ssh.size(3))
+        grid_lon = grid_lon.repeat(1, ssh.size(1), ssh.size(2), 1)
 
-        dx_from_dlon , dy_from_dlat = self.compute_dx_dy_dlat_dlon(grid_lat,grid_lon,dlat,dlon)
-        f_c = self.compute_coriolis_force(grid_lat,flag_mean_coriolis=flag_mean_coriolis)
+        dx_from_dlon, dy_from_dlat = self.compute_dx_dy_dlat_dlon(
+            grid_lat, grid_lon, dlat, dlon,
+        )
+        f_c = self.compute_coriolis_force(
+            grid_lat, flag_mean_coriolis=flag_mean_coriolis,
+        )
 
         dssh_dx = alpha_uv_geo / dx_from_dlon
         dssh_dy = alpha_uv_geo / dy_from_dlat
 
-        dssh_dy = ( 1. / f_c ) * dssh_dy
-        dssh_dx = ( 1. / f_c  )* dssh_dx
+        dssh_dy = (1. / f_c) * dssh_dy
+        dssh_dx = (1. / f_c) * dssh_dx
 
         factor_u_geo = -1. * dssh_dy
         factor_v_geo =  1. * dssh_dx
 
-        return factor_u_geo , factor_v_geo
+        return factor_u_geo, factor_v_geo
 
-    def compute_div_curl_strain(self,u,v,lat,lon,sigma=0.):
-
-        dlat = lat[0,1]-lat[0,0]
-        dlon = lon[0,1]-lon[0,0]
+    def compute_div_curl_strain(self, u, v, lat, lon, sigma=0.):
+        dlat = lat[0, 1] - lat[0, 0]
+        dlon = lon[0, 1] - lon[0, 0]
 
         # coriolis / lat/lon scaling
-        grid_lat = lat.view(u.size(0),1,u.size(2),1)
-        grid_lat = grid_lat.repeat(1,u.size(1),1,u.size(3))
-        grid_lon = lon.view(u.size(0),1,1,u.size(3))
-        grid_lon = grid_lon.repeat(1,u.size(1),u.size(2),1)
+        grid_lat = lat.view(u.size(0), 1, u.size(2), 1)
+        grid_lat = grid_lat.repeat(1, u.size(1), 1, u.size(3))
+        grid_lon = lon.view(u.size(0), 1, 1, u.size(3))
+        grid_lon = grid_lon.repeat(1, u.size(1), u.size(2), 1)
 
-        dx_from_dlon , dy_from_dlat = self.compute_dx_dy_dlat_dlon(grid_lat,grid_lon,dlat,dlon)
+        dx_from_dlon, dy_from_dlat = self.compute_dx_dy_dlat_dlon(
+            grid_lat, grid_lon, dlat, dlon,
+        )
 
-        du_dx , du_dy = self.compute_gradxy( u , sigma=sigma )
-        dv_dx , dv_dy = self.compute_gradxy( v , sigma=sigma )
+        du_dx, du_dy = self.compute_gradxy(u, sigma=sigma)
+        dv_dx, dv_dy = self.compute_gradxy(v, sigma=sigma)
 
         du_dx = du_dx / dx_from_dlon
         dv_dx = dv_dx / dx_from_dlon
@@ -392,195 +440,133 @@ class Torch_compute_derivatives_with_lon_lat(torch.nn.Module):
         du_dy = du_dy / dy_from_dlat
         dv_dy = dv_dy / dy_from_dlat
 
-        strain = torch.sqrt( ( dv_dx + du_dy ) **2 + (du_dx - dv_dy) **2 + self.eps )
+        strain = torch.sqrt((dv_dx + du_dy)**2 + (du_dx - dv_dy)**2 + self.eps)
 
         div = du_dx + dv_dy
         curl =  du_dy - dv_dx
 
-        return div,curl,strain#,dx_from_dlon,dy_from_dlat
-        #return div,curl,strain, torch.abs(du_dx) , torch.abs(du_dy)
+        return div,curl,strain
 
     def forward(self):
         return 1.
 
-if 1*0 :
-    def compute_div_with_lat_lon(u,v,lat,lon,sigma=1.0):
-        dlat = lat[1] - lat[0]
-        dlon = lon[1] - lon[0]
-
-        # coriolis / lat/lon scaling
-        grid_lat = lat.reshape( (1,u.shape[1],1))
-        grid_lat = np.tile( grid_lat , (v.shape[0],1,v.shape[2]) )
-        grid_lon = lon.reshape( (1,1,v.shape[2]))
-        grid_lon = np.tile( grid_lon , (v.shape[0],v.shape[1],1) )
-
-        dx_from_dlon , dy_from_dlat = compute_dx_dy_dlat_dlon(grid_lat,grid_lon,dlat,dlon)
-
-        du_dx = compute_gradx( u , sigma = sigma )
-        dv_dy = compute_grady( v , sigma = sigma )
-
-        du_dx = du_dx / dx_from_dlon
-        dv_dy = dv_dy / dy_from_dlat
-
-        return du_dx + dv_dy
-
-    def compute_curl_with_lat_lon(u,v,lat,lon,sigma=1.0):
-
-        dlat = lat[1] - lat[0]
-        dlon = lon[1] - lon[0]
-
-        # coriolis / lat/lon scaling
-        grid_lat = lat.reshape( (1,u.shape[1],1))
-        grid_lat = np.tile( grid_lat , (v.shape[0],1,v.shape[2]) )
-        grid_lon = lon.reshape( (1,1,v.shape[2]))
-        grid_lon = np.tile( grid_lon , (v.shape[0],v.shape[1],1) )
-
-        dx_from_dlon , dy_from_dlat = compute_dx_dy_dlat_dlon(grid_lat,grid_lon,dlat,dlon)
-
-        du_dy = compute_grady( u , sigma = sigma )
-        dv_dx = compute_gradx( v , sigma = sigma )
-
-        dv_dx = dv_dx / dx_from_dlon
-        du_dy = du_dy / dy_from_dlat
-
-        return du_dy - dv_dx
-
-    def compute_strain_with_lat_lon(u,v,lat,lon,sigma=1.0):
-        dlat = lat[1] - lat[0]
-        dlon = lon[1] - lon[0]
-
-        # coriolis / lat/lon scaling
-        grid_lat = lat.reshape( (1,u.shape[1],1))
-        grid_lat = np.tile( grid_lat , (v.shape[0],1,v.shape[2]) )
-        grid_lon = lon.reshape( (1,1,v.shape[2]))
-        grid_lon = np.tile( grid_lon , (v.shape[0],v.shape[1],1) )
-
-        dx_from_dlon , dy_from_dlat = compute_dx_dy_dlat_dlon(grid_lat,grid_lon,dlat,dlon)
-
-        du_dx = compute_gradx( u , sigma = sigma )
-        dv_dy = compute_grady( v , sigma = sigma )
-
-        du_dy = compute_grady( u , sigma = sigma )
-        dv_dx = compute_gradx( v , sigma = sigma )
-
-        du_dx = du_dx / dx_from_dlon
-        dv_dx = dv_dx / dx_from_dlon
-
-        du_dy = du_dy / dy_from_dlat
-        dv_dy = dv_dy / dy_from_dlat
-
-        return np.sqrt( ( dv_dx + du_dy ) **2 +  (du_dx - dv_dy) **2 )
-
 
 def get_4dvarnet(hparams):
     return NN_4DVar.Solver_Grad_4DVarNN(
-                Phi_r(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
-                    hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic, hparams.phi_param),
-                Model_H(hparams.shape_state[0]),
-                NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                    hparams.dim_grad_solver, hparams.dropout),
-                hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
+        Phi_r(
+            hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2,
+            hparams.sS, hparams.nbBlocks, hparams.dropout_phi_r,
+            hparams.stochastic, hparams.phi_param,
+        ),
+        Model_H(hparams.shape_state[0]),
+        NN_4DVar.model_GradUpdateLSTM(
+            hparams.shape_state, hparams.UsePriodicBoundary,
+            hparams.dim_grad_solver, hparams.dropout,
+        ),
+        hparams.norm_obs, hparams.norm_prior, hparams.shape_state,
+        hparams.n_grad * hparams.n_fourdvar_iter,
+    )
 
 
 def get_4dvarnet_sst(hparams):
-    print('...... Set mdoel %d'%hparams.use_sst_obs,flush=True)
-    if hparams.use_sst_obs :
-        if hparams.sst_model == 'linear-bn' :
-            return NN_4DVar.Solver_Grad_4DVarNN(
-                        Phi_r(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
-                            hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic, hparams.phi_param),
-                        Model_HwithSSTBN(hparams.shape_state[0], dT=hparams.dT,dim=hparams.dim_obs_sst_feat),
-                        NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                            hparams.dim_grad_solver, hparams.dropout),
-                        hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-        elif hparams.sst_model == 'nolinear-tanh-bn' :
-            print('...... residual_wrt_geo_velocities = %d'%hparams.residual_wrt_geo_velocities,flush=True)
-            if ( hparams.residual_wrt_geo_velocities == 3 ) or ( hparams.residual_wrt_geo_velocities == 4 ):
-                return NN_4DVar.Solver_Grad_4DVarNN(
-                            Phi_r(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
-                                hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic, hparams.phi_param),
-                            Model_HwithSSTBN_nolin_tanh_withlatlon(hparams.shape_state[0], dT=hparams.dT,dim=hparams.dim_obs_sst_feat),
-                            NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                                hparams.dim_grad_solver, hparams.dropout),
-                            hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-            else:
-                return NN_4DVar.Solver_Grad_4DVarNN(
-                            Phi_r(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
-                                hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic, hparams.phi_param),
-                            Model_HwithSSTBN_nolin_tanh(hparams.shape_state[0], dT=hparams.dT,dim=hparams.dim_obs_sst_feat),
-                            NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                                hparams.dim_grad_solver, hparams.dropout),
-                            hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
+    print(f'...... Set model {hparams.use_sst_obs}', flush=True)
+    if not hparams.use_sst_obs:
+        return get_4dvarnet(hparams)
 
-            return NN_4DVar.Solver_Grad_4DVarNN(
-                        Phi_r(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
-                            hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic, hparams.phi_param),
-                        Model_HwithSSTBN_nolin_tanh(hparams.shape_state[0], dT=hparams.dT,dim=hparams.dim_obs_sst_feat),
-                        NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                            hparams.dim_grad_solver, hparams.dropout),
-                        hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-        elif hparams.sst_model == 'nolinear-tanh' :
-            return NN_4DVar.Solver_Grad_4DVarNN(
-                        Phi_r(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
-                            hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic, hparams.phi_param),
-                        Model_HwithSST_nolin_tanh(hparams.shape_state[0], dT=hparams.dT,dim=hparams.dim_obs_sst_feat),
-                        NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                            hparams.dim_grad_solver, hparams.dropout),
-                        hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-        elif hparams.sst_model == 'linear':
-            return NN_4DVar.Solver_Grad_4DVarNN(
-                            Phi_r(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
-                                hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic, hparams.phi_param),
-                            Model_HwithSST(hparams.shape_state[0], dT=hparams.dT,dim=hparams.dim_obs_sst_feat),
-                            NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                                hparams.dim_grad_solver, hparams.dropout),
-                            hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-        elif hparams.sst_model == 'linear-bn-att':
-            return NN_4DVar.Solver_Grad_4DVarNN(
-                            Phi_r(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
-                                hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic, hparams.phi_param),
-                            Model_HwithSSTBNandAtt(hparams.shape_state[0], dT=hparams.dT,dim=hparams.dim_obs_sst_feat),
-                            NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                                hparams.dim_grad_solver, hparams.dropout),
-                            hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-        elif hparams.sst_model == 'nolinear-tanh-bn-att':
-            return NN_4DVar.Solver_Grad_4DVarNN(
-                            Phi_r(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
-                                hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic, hparams.phi_param),
-                            Model_HwithSSTBNAtt_nolin_tanh(hparams.shape_state[0], dT=hparams.dT,dim=hparams.dim_obs_sst_feat),
-                            NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                                hparams.dim_grad_solver, hparams.dropout),
-                            hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
+    if hparams.sst_model == 'linear-bn':
+        _sst_model = Model_HwithSSTBN(
+            hparams.shape_state[0], dT=hparams.dT,
+            dim=hparams.dim_obs_sst_feat,
+        )
+    elif hparams.sst_model == 'nolinear-tanh-bn':
+        res_wrt_geo_vel = hparams.residual_wrt_geo_velocities
+        print(
+            f'...... residual_wrt_geo_velocities = {res_wrt_geo_vel}',
+            flush=True,
+        )
 
+        if res_wrt_geo_vel in (3, 4):
+            _sst_model = Model_HwithSSTBN_nolin_tanh_withlatlon(
+                hparams.shape_state[0], dT=hparams.dT,
+                dim=hparams.dim_obs_sst_feat,
+            )
+        else:
+            _sst_model = Model_HwithSSTBN_nolin_tanh(
+                hparams.shape_state[0], dT=hparams.dT,
+                dim=hparams.dim_obs_sst_feat,
+            )
+    elif hparams.sst_model == 'nolinear-tanh':
+        _sst_model = Model_HwithSST_nolin_tanh(
+            hparams.shape_state[0], dT=hparams.dT,
+            dim=hparams.dim_obs_sst_feat,
+        )
+    elif hparams.sst_model == 'linear':
+        _sst_model = Model_HwithSST(
+            hparams.shape_state[0], dT=hparams.dT,
+            dim=hparams.dim_obs_sst_feat,
+        )
+    elif hparams.sst_model == 'linear-bn-att':
+        _sst_model = Model_HwithSSTBNandAtt(
+            hparams.shape_state[0], dT=hparams.dT, dim=hparams.dim_obs_sst_feat,
+        ),
+    elif hparams.sst_model == 'nolinear-tanh-bn-att':
+        _sst_model = Model_HwithSSTBNAtt_nolin_tanh(
+            hparams.shape_state[0], dT=hparams.dT,
+            dim=hparams.dim_obs_sst_feat,
+        ),
     else:
-       return get_4dvarnet(hparams)
+        raise ValueError(
+            f'Invalid argument: hparams.sst_model = {hparams.sst_model}',
+        )
+
+    return NN_4DVar.Solver_Grad_4DVarNN(  # Final return
+        Phi_r(
+            hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2,
+            hparams.sS, hparams.nbBlocks, hparams.dropout_phi_r,
+            hparams.stochastic, hparams.phi_param,
+        ),
+        _sst_model,
+        NN_4DVar.model_GradUpdateLSTM(
+            hparams.shape_state, hparams.UsePriodicBoundary,
+            hparams.dim_grad_solver, hparams.dropout,
+        ),
+        hparams.norm_obs, hparams.norm_prior, hparams.shape_state,
+        hparams.n_grad * hparams.n_fourdvar_iter,
+    )
 
 
 class ModelSamplingFromSST(torch.nn.Module):
-    def __init__(self,dT,nb_feat=10,thr=0.1):
-        super(ModelSamplingFromSST, self).__init__()
-        self.dT     = dT
-        self.Tr     = torch.nn.Threshold(thr, 0.)
-        self.S      = torch.nn.Sigmoid()#torch.nn.Softmax(dim=1)
-        self.conv1  = torch.nn.Conv2d(int(dT/2),nb_feat,(3,3),padding=1)
-        self.conv2  = torch.nn.Conv2d(nb_feat,dT-int(dT/2),(1,1),padding=0,bias=True)
+    def __init__(self, dT, nb_feat=10, thr=.1):
+        super().__init__()
+        self.dT = dT
+        self.Tr = torch.nn.Threshold(thr, 0.)
+        self.S = torch.nn.Sigmoid()
+        self.conv1 = torch.nn.Conv2d(int(dT/2), nb_feat, (3, 3), padding=1)
+        self.conv2 = torch.nn.Conv2d(
+            nb_feat, dT-int(dT/2), (1, 1), padding=0, bias=True,
+        )
 
-    def forward(self , y ):
-        yconv = self.conv2( F.relu( self.conv1( y[:,:int(self.dT/2),:,:] ) ) )
+    def forward(self, y):
+        yconv = self.conv2(F.relu(self.conv1(y[:, :int(self.dT/2), :, :])))
 
-        yout1 = self.S( yconv )
+        yout1 = self.S(yconv)
+        yout1 = torch.cat(
+            (torch.zeros_like(y[:, :int(self.dT/2), :, :]), yout1), dim=1,
+        )
+        yout2 = self.Tr(yout1)
 
-        yout1 = torch.cat( (torch.zeros_like(y[:,:int(self.dT/2),:,:]),yout1) , dim=1)
-        yout2 = self.Tr( yout1 )
+        return [yout1, yout2]
 
-        return [yout1,yout2]
 
 def get_phi(hparams):
     class PhiPassThrough(torch.nn.Module):
         def __init__(self):
             super().__init__()
-            self.phi = Phi_r(hparams.shape_data[0], hparams.DimAE, hparams.dW, hparams.dW2,
-                    hparams.sS, hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic, hparams.phi_param)
+            self.phi = Phi_r(
+                hparams.shape_data[0], hparams.DimAE, hparams.dW, hparams.dW2,
+                hparams.sS, hparams.nbBlocks, hparams.dropout_phi_r,
+                hparams.stochastic, hparams.phi_param,
+            )
             self.phi_r = torch.nn.Identity()
             self.n_grad = 0
 
@@ -590,163 +576,159 @@ def get_phi(hparams):
     return PhiPassThrough()
 
 
-def get_constant_crop(patch_size, crop, dim_order=['time', 'lat', 'lon']):
-        patch_weight = np.zeros([patch_size[d] for d in dim_order], dtype='float32')
-        #print(patch_size, crop)
-        mask = tuple(
-                slice(crop[d], -crop[d]) if crop.get(d, 0)>0 else slice(None, None)
-                for d in dim_order
-        )
-        patch_weight[mask] = 1.
-        #print(patch_weight.sum())
-        return patch_weight
+def get_constant_crop(patch_size, crop, dim_order=('time', 'lat', 'lon')):
+    patch_weight = np.zeros(
+        [patch_size[d] for d in dim_order], dtype='float32',
+    )
+
+    mask = []
+    for d in dim_order:
+        if crop.get(d, 0) > 0:
+            mask.append(slice(crop[d], -crop[d]))
+        else:
+            mask.append(slice(None, None))
+    mask = tuple(mask)
+
+    patch_weight[mask] = 1.
+
+    return patch_weight
+
 
 def get_hanning_mask(patch_size, **kwargs):
-
-    t_msk =kornia.filters.get_hanning_kernel1d(patch_size['time'])
-    s_msk = kornia.filters.get_hanning_kernel2d((patch_size['lat'], patch_size['lon']))
-
+    t_msk = kornia.filters.get_hanning_kernel1d(patch_size['time'])
+    s_msk = kornia.filters.get_hanning_kernel2d(
+        (patch_size['lat'], patch_size['lon'])
+    )
     patch_weight = t_msk[:, None, None] * s_msk[None, :, :]
+
     return patch_weight.cpu().numpy()
+
 
 def get_cropped_hanning_mask(patch_size, crop, **kwargs):
     pw = get_constant_crop(patch_size, crop)
-
-    t_msk =kornia.filters.get_hanning_kernel1d(patch_size['time'])
-
+    t_msk = kornia.filters.get_hanning_kernel1d(patch_size['time'])
     patch_weight = t_msk[:, None, None] * pw
+
     return patch_weight.cpu().numpy()
 
 
 class Div_uv(torch.nn.Module):
-    def __init__(self,_filter='diff-non-centered'):
-        super(Div_uv, self).__init__()
+    def __init__(self, _filter='diff-non-centered'):
+        super().__init__()
 
         if _filter == 'sobel':
             a = np.array([[1., 0., -1.], [2., 0., -2.], [1., 0., -1.]])
-            self.convGx = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=0, bias=False)
-            self.convGx.weight = torch.nn.Parameter(torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
-
             b = np.array([[1., 2., 1.], [0., 0., 0.], [-1., -2., -1.]])
-            self.convGy = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=0, bias=False)
-            self.convGy.weight = torch.nn.Parameter(torch.from_numpy(b).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
         elif _filter == 'diff-non-centered':
-            a = np.array([[0., 0., 0.], [0.3, 0.4, -0.7], [0., 0., 0.]])
-            self.convGx = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=0, bias=False)
-            self.convGx.weight = torch.nn.Parameter(torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
-            b = np.array([[0., 0.3, 0.], [0., 0.4, 0.], [0., -0.7, 0.]])
-            self.convGy = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=0, bias=False)
-            self.convGy.weight = torch.nn.Parameter(torch.from_numpy(b).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
-        elif filter == 'diff':
+            a = np.array([[0., 0., 0.], [.3, .4, -.7], [0., 0., 0.]])
+            b = np.array([[0., .3, 0.], [0., .4, 0.], [0., -.7, 0.]])
+        elif _filter == 'diff':
             a = np.array([[0., 0., 0.], [0., 1., -1.], [0., 0., 0.]])
-            self.convGx = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=0, bias=False)
-            self.convGx.weight = torch.nn.Parameter(torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
-            b = np.array([[0., 0.3, 0.], [0., 1., 0.], [0., -1., 0.]])
-            self.convGy = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=0, bias=False)
-            self.convGy.weight = torch.nn.Parameter(torch.from_numpy(b).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
-    def forward(self, u,v):
+            b = np.array([[0., .3, 0.], [0., 1., 0.], [0., -1., 0.]])
+        else:
+            raise ValueError(f'Invalid argument: _filter={_filter}')
 
+        self.convGx = torch.nn.Conv2d(
+            1, 1, kernel_size=3, stride=1, padding=0, bias=False,
+        )
+        self.convGx.weight = torch.nn.Parameter(
+            torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0), requires_grad=False,
+        )
+
+        self.convGy = torch.nn.Conv2d(
+            1, 1, kernel_size=3, stride=1, padding=0, bias=False,
+        )
+        self.convGy.weight = torch.nn.Parameter(
+            torch.from_numpy(b).float().unsqueeze(0).unsqueeze(0), requires_grad=False,
+        )
+
+    def forward(self, u, v):
         if u.size(1) == 1:
             G_x = self.convGx(u)
             G_y = self.convGy(v)
+            div_ = G_x + G_y
+
+            return div_.view(-1, 1, u.size(1)-2, u.size(2)-2)
+
+        for kk in range(u.size(1)):
+            G_x = self.convGx(u[:, kk, :, :].view(-1, 1, u.size(2), u.size(3)))
+            G_y = self.convGy(v[:, kk, :, :].view(-1, 1, u.size(2), u.size(3)))
+
+            G_x = G_x.view(-1, 1, u.size(2) - 2, u.size(2) - 2)
+            G_y = G_y.view(-1, 1, u.size(2) - 2, u.size(2) - 2)
 
             div_ = G_x + G_y
-            div = div_.view(-1, 1, u.size(1) - 2, u.size(2) - 2)
-        else:
-
-            for kk in range(0, u.size(1)):
-                G_x = self.convGx(u[:, kk, :, :].view(-1, 1, u.size(2), u.size(3)))
-                G_y = self.convGy(v[:, kk, :, :].view(-1, 1, u.size(2), u.size(3)))
-
-                G_x = G_x.view(-1, 1, u.size(2) - 2, u.size(2) - 2)
-                G_y = G_y.view(-1, 1, u.size(2) - 2, u.size(2) - 2)
-
-                div_ = G_x + G_y
-                if kk == 0:
-                    div = div_.view(-1, 1, u.size(2) - 2, u.size(2) - 2)
-                else:
-                    div = torch.cat((div, div_.view(-1, 1, u.size(2) - 2, u.size(3) - 2)), dim=1)
+            if kk == 0:
+                div = div_.view(-1, 1, u.size(2) - 2, u.size(2) - 2)
+            else:
+                div = torch.cat((div, div_.view(-1, 1, u.size(2) - 2, u.size(3) - 2)), dim=1)
 
         return div
 
-class Div_uv_with_lat_lon_scaling(torch.nn.Module):
-    def __init__(self,_filter='diff-non-centered'):
-        super(Div_uv, self).__init__()
 
-        if _filter == 'sobel':
-            a = np.array([[1., 0., -1.], [2., 0., -2.], [1., 0., -1.]])
-            self.convGx = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=0, bias=False)
-            self.convGx.weight = torch.nn.Parameter(torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
+# NOTE I made the following class inherits from Div_uv as they have
+# exactly the same __init__; might not be advisable though (tell me)
+class Div_uv_with_lat_lon_scaling(Div_uv):
+    def __init__(self, _filter='diff-non-centered'):
+        super().__init__(_filter=_filter)
 
-            b = np.array([[1., 2., 1.], [0., 0., 0.], [-1., -2., -1.]])
-            self.convGy = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=0, bias=False)
-            self.convGy.weight = torch.nn.Parameter(torch.from_numpy(b).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
-        elif _filter == 'diff-non-centered':
-            a = np.array([[0., 0., 0.], [0.3, 0.4, -0.7], [0., 0., 0.]])
-            self.convGx = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=0, bias=False)
-            self.convGx.weight = torch.nn.Parameter(torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
-            b = np.array([[0., 0.3, 0.], [0., 0.4, 0.], [0., -0.7, 0.]])
-            self.convGy = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=0, bias=False)
-            self.convGy.weight = torch.nn.Parameter(torch.from_numpy(b).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
-        elif filter == 'diff':
-            a = np.array([[0., 0., 0.], [0., 1., -1.], [0., 0., 0.]])
-            self.convGx = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=0, bias=False)
-            self.convGx.weight = torch.nn.Parameter(torch.from_numpy(a).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
-            b = np.array([[0., 0.3, 0.], [0., 1., 0.], [0., -1., 0.]])
-            self.convGy = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=0, bias=False)
-            self.convGy.weight = torch.nn.Parameter(torch.from_numpy(b).float().unsqueeze(0).unsqueeze(0), requires_grad=False)
+    def compute_c(self, lat, lon, dlat, dlon):
+        a = torch.sin(dlat/2)**2 + torch.cos(lat)**2 * torch.sin(dlon/2)**2
+        return 2 * 6.371e6 * np.atan2(torch.sqrt(a), torch.sqrt(1.-a))
 
-
-    def compute_c(self,lat,lon,dlat,dlon):
-        a = torch.sin(dlat / 2)**2 + torch.cos(lat) ** 2 * torch.sin(dlon / 2)**2
-        return 2 * 6.371e6 * np.atan2( torch.sqrt(a), torch.sqrt(1. - a))
-
-    def compute_dlat_dlon_scaling(self,lat,lon,dlat,dlon):
-
-        dy_from_dlat =  self.compute_c(lat,lon,dlat,0.)
-        dx_from_dlon =  self.compute_c(lat,lon,0.,dlon)
+    def compute_dlat_dlon_scaling(self, lat, lon, dlat, dlon):
+        dy_from_dlat = self.compute_c(lat, lon, dlat, 0.)
+        dx_from_dlon = self.compute_c(lat, lon, 0., dlon)
 
         return dx_from_dlon, dy_from_dlat
 
-    def forward(self, u,v,lat,lon,dlat,dlon):
-
-        dx_from_dlon, dy_from_dlat = self.compute_dlat_dlon_scaling(lat,lon,dlat,dlon)
+    def forward(self, u, v, lat, lon, dlat, dlon):
+        dx_from_dlon, dy_from_dlat = self.compute_dlat_dlon_scaling(
+            lat, lon, dlat, dlon,
+        )
 
         if u.size(1) == 1:
             G_x = self.convGx(u)
             G_y = self.convGy(v)
+            div_ = G_x*dx_from_dlon + G_y*dy_from_dlat
 
-            div_ = G_x * dx_from_dlon + G_y * dy_from_dlat
-            div = div_.view(-1, 1, u.size(1) - 2, u.size(2) - 2)
-        else:
+            return div_.view(-1, 1, u.size(1)-2, u.size(2)-2)
 
-            for kk in range(0, u.size(1)):
-                G_x = self.convGx(u[:, kk, :, :].view(-1, 1, u.size(2), u.size(3)))
-                G_y = self.convGy(v[:, kk, :, :].view(-1, 1, u.size(2), u.size(3)))
+        for k in range(u.size(1)):
+            G_x = self.convGx(u[:, k, :, :].view(-1, 1, u.size(2), u.size(3)))
+            G_y = self.convGy(v[:, k, :, :].view(-1, 1, u.size(2), u.size(3)))
 
-                G_x = G_x.view(-1, 1, u.size(2) - 2, u.size(2) - 2)
-                G_y = G_y.view(-1, 1, u.size(2) - 2, u.size(2) - 2)
+            G_x = G_x.view(-1, 1, u.size(2)-2, u.size(2)-2)
+            G_y = G_y.view(-1, 1, u.size(2)-2, u.size(2)-2)
 
-                div_ = G_x * dx_from_dlon + G_y * dy_from_dlat
-                if kk == 0:
-                    div = div_.view(-1, 1, u.size(2) - 2, u.size(2) - 2)
-                else:
-                    div = torch.cat((div, div_.view(-1, 1, u.size(2) - 2, u.size(3) - 2)), dim=1)
+            div_ = G_x*dx_from_dlon + G_y*dy_from_dlat
+            if k == 0:
+                div = div_.view(-1, 1, u.size(2) - 2, u.size(2) - 2)
+            else:
+                div = torch.cat(
+                    (div, div_.view(-1, 1, u.size(2)-2, u.size(3)-2)), dim=1,
+                )
 
         return div
 
+
 ############################################ Lightning Module #######################################################################
+
 class Model_HwithSSTBN_nolin_tanh_withlatlon(torch.nn.Module):
-    def __init__(self,shape_data, dT=5,dim=5,width_kernel=3,padding_mode='reflect',type_wgeo=3):
-        super(Model_HwithSSTBN_nolin_tanh_withlatlon, self).__init__()
+    def __init__(
+        self, shape_data, dT=5, dim=5, width_kernel=3, padding_mode='reflect',
+        type_wgeo=3,
+    ):
+        super().__init__()
 
         self.dim_obs = 2
         self.dim_obs_channel = np.array([shape_data, dim])
 
-        #print('..... # im obs sst : %d'%dim)
         self.w_kernel = width_kernel
 
-        self.bn_feat = torch.nn.BatchNorm2d(self.dim_obs_channel[1],track_running_stats=False)
+        self.bn_feat = torch.nn.BatchNorm2d(
+            self.dim_obs_channel[1], track_running_stats=False,
+        )
 
         self.var_tr_uv = 1.
         self.dT = dT
@@ -755,45 +737,73 @@ class Model_HwithSSTBN_nolin_tanh_withlatlon(torch.nn.Module):
 
         self.type_geo_obs = 0
         if self.type_geo_obs == 1:
-            dim_state = 4*self.dT#4*self.dT
+            dim_state = 4*self.dT
         elif self.type_geo_obs == 2:
-            dim_state = 6*self.dT#4*self.dT
+            dim_state = 6*self.dT
         else:
-            dim_state = 10*self.dT#4*self.dT
+            dim_state = 10*self.dT
 
-        self.convx11 = torch.nn.Conv2d(dim_state, 2*self.dim_obs_channel[1], (3, 3), padding=1, bias=False,padding_mode=padding_mode)
-        self.convx12 = torch.nn.Conv2d(2*self.dim_obs_channel[1], self.dim_obs_channel[1], (3, 3), padding=1, bias=False,padding_mode=padding_mode)
-        self.convx21 = torch.nn.Conv2d(self.dim_obs_channel[1], 2*self.dim_obs_channel[1], (3, 3), padding=1, bias=False,padding_mode=padding_mode)
-        self.convx22 = torch.nn.Conv2d(2*self.dim_obs_channel[1], self.dim_obs_channel[1], (3, 3), padding=1, bias=False,padding_mode=padding_mode)
+        self.convx11 = torch.nn.Conv2d(
+            dim_state, 2*self.dim_obs_channel[1], (3, 3), padding=1, bias=False,
+            padding_mode=padding_mode,
+        )
+        self.convx12 = torch.nn.Conv2d(
+            2*self.dim_obs_channel[1], self.dim_obs_channel[1], (3, 3),
+            padding=1, bias=False, padding_mode=padding_mode,
+        )
+        self.convx21 = torch.nn.Conv2d(
+            self.dim_obs_channel[1], 2*self.dim_obs_channel[1], (3, 3),
+            padding=1, bias=False, padding_mode=padding_mode,
+        )
+        self.convx22 = torch.nn.Conv2d(
+            2*self.dim_obs_channel[1], self.dim_obs_channel[1], (3, 3),
+            padding=1, bias=False, padding_mode=padding_mode,
+        )
 
+        self.convy11 = torch.nn.Conv2d(
+            dT, 2*self.dim_obs_channel[1], (3, 3), padding=1, bias=False,
+            padding_mode=padding_mode,
+        )
+        self.convy12 = torch.nn.Conv2d(
+            2*self.dim_obs_channel[1], self.dim_obs_channel[1], (3, 3),
+            padding=1, bias=False, padding_mode=padding_mode,
+        )
+        self.convy21 = torch.nn.Conv2d(
+            self.dim_obs_channel[1], 2*self.dim_obs_channel[1], (3, 3),
+            padding=1, bias=False, padding_mode=padding_mode,
+        )
+        self.convy22 = torch.nn.Conv2d(
+            2*self.dim_obs_channel[1], self.dim_obs_channel[1], (3, 3),
+            padding=1, bias=False, padding_mode=padding_mode,
+        )
 
-        self.convy11 = torch.nn.Conv2d(dT, 2*self.dim_obs_channel[1], (3, 3), padding=1, bias=False,padding_mode=padding_mode)
-        self.convy12 = torch.nn.Conv2d(2*self.dim_obs_channel[1], self.dim_obs_channel[1], (3, 3), padding=1, bias=False,padding_mode=padding_mode)
-        self.convy21 = torch.nn.Conv2d(self.dim_obs_channel[1], 2*self.dim_obs_channel[1], (3, 3), padding=1, bias=False,padding_mode=padding_mode)
-        self.convy22 = torch.nn.Conv2d(2*self.dim_obs_channel[1], self.dim_obs_channel[1], (3, 3), padding=1, bias=False,padding_mode=padding_mode)
-
-        self.conv_m = torch.nn.Conv2d(dT, self.dim_obs_channel[1], (3, 3), padding=1, bias=True,padding_mode=padding_mode)
-        self.sigmoid = torch.nn.Sigmoid()  # torch.nn.Softmax(dim=1)
+        self.conv_m = torch.nn.Conv2d(dT, self.dim_obs_channel[1], (3, 3),
+        padding=1, bias=True, padding_mode=padding_mode,
+        )
+        self.sigmoid = torch.nn.Sigmoid()
 
         self.lat_rad = None
         self.lon_rad = None
-        self.compute_derivativeswith_lon_lat = Torch_compute_derivatives_with_lon_lat(dT=dT)
+        self.compute_derivativeswith_lon_lat = (
+            TorchComputeDerivativesWithLonLat(dT=dT)
+        )
         self.aug_state = False
 
-    def compute_geo_factor(self,outputs, lat_rad, lon_rad,sigma=0.):
-        return self.compute_derivativeswith_lon_lat.compute_geo_factor(outputs, lat_rad, lon_rad,sigma=0.)
+    def compute_geo_factor(self, outputs, lat_rad, lon_rad, sigma=0.):
+        return self.compute_derivativeswith_lon_lat.compute_geo_factor(
+            outputs, lat_rad, lon_rad, sigma=0.,
+        )
 
-    def extract_sst_feature(self,y1):
-        y1     = self.convy12( torch.tanh( self.convy11(y1) ) )
-        y_feat = self.bn_feat( self.convy22( torch.tanh( self.convy21( torch.tanh(y1) ) ) ) )
+    def extract_sst_feature(self, y1):
+        y1 = self.convy12(torch.tanh(self.convy11(y1)))
+        y_feat = self.bn_feat(
+            self.convy22(torch.tanh(self.convy21(torch.tanh(y1))))
+        )
 
         return y_feat
 
-    def extract_state_feature(self,x):
-        # ssh component
-        #print('..... obs model with lat/lon')
-
-        if self.aug_state :
+    def extract_state_feature(self, x):
+        if self.aug_state:
             xbar_ssh = x[:, :self.dT, :, :]
             dx_ssh = x[:, 2*self.dT:3*self.dT, :, :]
             x_u = x[:, 3*self.dT:4*self.dT, :, :]
@@ -805,30 +815,31 @@ class Model_HwithSSTBN_nolin_tanh_withlatlon(torch.nn.Module):
             x_v = x[:, 3*self.dT:4*self.dT, :, :]
 
         # geoostrophic factor
-        u_geo_factor, v_geo_factor = self.compute_geo_factor(xbar_ssh, self.lat_rad, self.lon_rad,sigma=0.)
+        u_geo_factor, v_geo_factor = self.compute_geo_factor(
+            xbar_ssh, self.lat_rad, self.lon_rad,sigma=0.,
+        )
 
         # latent component
-        if self.type_geo_obs == 1 :
-            x_ssh_u = u_geo_factor * (xbar_ssh+dx_ssh)
-            x_ssh_v = v_geo_factor * (xbar_ssh+dx_ssh)
+        if self.type_geo_obs == 1:
+            x_ssh_u = u_geo_factor * (xbar_ssh + dx_ssh)
+            x_ssh_v = v_geo_factor * (xbar_ssh + dx_ssh)
+
             x_u_u = u_geo_factor * x_u
-            #x_u_v = v_geo_factor * x_u
-            #x_v_u = u_geo_factor * x_v
             x_v_v = v_geo_factor * x_v
-            x_all = torch.cat((x_ssh_u,x_ssh_v,x_u_u,x_v_v),dim=1)
-        elif self.type_geo_obs == 2 :
+
+            x_all = torch.cat((x_ssh_u,x_ssh_v,x_u_u,x_v_v), dim=1)
+        elif self.type_geo_obs == 2:
             xbar_ssh_u = u_geo_factor * xbar_ssh
             xbar_ssh_v = v_geo_factor * xbar_ssh
-
             dx_ssh_u = u_geo_factor * dx_ssh
             dx_ssh_v = v_geo_factor * dx_ssh
+
             x_u_u = u_geo_factor * x_u
-            #x_u_v = v_geo_factor * x_u
-            #x_v_u = u_geo_factor * x_v
             x_v_v = v_geo_factor * x_v
 
-            x_all = torch.cat((xbar_ssh_u,xbar_ssh_v,dx_ssh_u,dx_ssh_v,x_u_u,x_v_v),dim=1)
-
+            x_all = torch.cat(
+                (xbar_ssh_u, xbar_ssh_v, dx_ssh_u, dx_ssh_v, x_u_u, x_v_v),dim=1,
+            )
         else:
             xbar_ssh_u = u_geo_factor * xbar_ssh
             xbar_ssh_v = v_geo_factor * xbar_ssh
@@ -836,25 +847,21 @@ class Model_HwithSSTBN_nolin_tanh_withlatlon(torch.nn.Module):
             dx_ssh_u = u_geo_factor * dx_ssh
             dx_ssh_v = v_geo_factor * dx_ssh
             x_u_u = u_geo_factor * x_u
-            #x_u_v = v_geo_factor * x_u
-            #x_v_u = u_geo_factor * x_v
             x_v_v = v_geo_factor * x_v
 
-            x_all = torch.cat((xbar_ssh,xbar_ssh_u,xbar_ssh_v,dx_ssh,dx_ssh_u,dx_ssh_v,x_u,x_u_u,x_v,x_v_v),dim=1)
+            x_all = torch.cat(
+                (xbar_ssh,xbar_ssh_u,xbar_ssh_v,dx_ssh,dx_ssh_u,dx_ssh_v,x_u,x_u_u,x_v,x_v_v),
+                dim=1,
+            )
 
-        if 1*0 :
-            if self.aug_state :
-                if x.size(1) > 5*self.dT :
-                    x_all = torch.cat((x_all,x[:, 5*self.dT:, :, :]),dim=1)
-            else:
-                if x.size(1) > 4*self.dT :
-                    x_all = torch.cat((x_all,x[:, 4*self.dT:, :, :]),dim=1)
-
-        #print('..... s_all_size')
-        #print(x_all.size())
-
-        x1     = self.convx12( torch.tanh( self.convx11( x_all ) ) )
-        x_feat = self.bn_feat( self.convx22( torch.tanh( self.convx21( torch.tanh(x1) ) ) ) )
+        x_feat = self.convx11(x_all)
+        x_feat = torch.tanh(x_feat)
+        x_feat = self.convx12(x_feat)
+        x_feat = torch.tanh(x1)
+        x_feat = self.convx21(x_feat)
+        x_feat = torch.tanh(x_feat)
+        x_feat = self.convx22(x_feat)
+        x_feat = self.bn_feat(x_feat)
 
         return x_feat
 
@@ -871,27 +878,29 @@ class Model_HwithSSTBN_nolin_tanh_withlatlon(torch.nn.Module):
 
         return [dyout, dyout1]
 
+
 class LitModelUV(pl.LightningModule):
-
     MODELS = {
-            '4dvarnet': get_4dvarnet,
-            '4dvarnet_sst': get_4dvarnet_sst,
-            'phi': get_phi,
-             }
+        '4dvarnet': get_4dvarnet,
+        '4dvarnet_sst': get_4dvarnet_sst,
+        'phi': get_phi,
+    }
 
-    def __init__(self,
-                 hparam=None,
-                 min_lon=None, max_lon=None,
-                 min_lat=None, max_lat=None,
-                 ds_size_time=None,
-                 ds_size_lon=None,
-                 ds_size_lat=None,
-                 time=None,
-                 dX = None, dY = None,
-                 swX = None, swY = None,
-                 coord_ext = None,
-                 test_domain=None,
-                 *args, **kwargs):
+    def __init__(
+        self,
+        hparam=None,
+        min_lon=None, max_lon=None,
+        min_lat=None, max_lat=None,
+        ds_size_time=None,
+        ds_size_lon=None,
+        ds_size_lat=None,
+        time=None,
+        dX = None, dY = None,
+        swX = None, swY = None,
+        coord_ext = None,
+        test_domain=None,
+        *args, **kwargs,
+    ):
         super().__init__()
         hparam = {} if hparam is None else hparam
         hparams = hparam if isinstance(hparam, dict) else OmegaConf.to_container(hparam, resolve=True)
@@ -997,7 +1006,7 @@ class LitModelUV(pl.LightningModule):
 
         if self.hparams.learn_fsgd_param == True :
             self.model.model_Grad.set_fsgd_param_trainable()
-        self.compute_derivativeswith_lon_lat = Torch_compute_derivatives_with_lon_lat(dT=self.hparams.dT)
+        self.compute_derivativeswith_lon_lat = TorchComputeDerivativesWithLonLat(dT=self.hparams.dT)
         #if self.flag_compute_div_with_lat_scaling :
         #    self.div_field = Div_uv_with_lat_lon_scaling()
         #else:
@@ -1719,7 +1728,7 @@ class LitModelUV(pl.LightningModule):
             lat_rad = lat_rad.repeat()
 
 
-            t_compute_geo_velocities =  Torch_compute_derivatives_with_lon_lat()
+            t_compute_geo_velocities =  TorchComputeDerivativesWithLonLat()
             t_ssh = torch.Tensor(self.test_xr_ds.gt.data)#.view(-1,1,self.test_xr_ds.pred_u.shape[1],self.test_xr_ds.pred_u.shape[2])
             t_ssh = t_ssh.view(-1,1,t_ssh.size(1),t_ssh.size(2))
             t_lat_rad = torch.Tensor( lat_rad )
@@ -1753,7 +1762,7 @@ class LitModelUV(pl.LightningModule):
         if flag_heat_equation :
             iter_heat = 5
             lam = self.sig_filter_div_diag
-            t_compute_div_curl_strain_with_lat_lon =  Torch_compute_derivatives_with_lon_lat()
+            t_compute_div_curl_strain_with_lat_lon =  TorchComputeDerivativesWithLonLat()
             def heat_equation(u,iter,lam):
                 t_u = torch.Tensor(u).view(-1,1,u.shape[1],u.shape[2])
                 f_u = t_compute_div_curl_strain_with_lat_lon.heat_equation(t_u,iter=iter,lam=lam)
@@ -1785,7 +1794,7 @@ class LitModelUV(pl.LightningModule):
             t_lat_rad = torch.Tensor( lat_rad )
             t_lon_rad = torch.Tensor( lon_rad )
 
-            t_compute_div_curl_strain_with_lat_lon =  Torch_compute_derivatives_with_lon_lat()
+            t_compute_div_curl_strain_with_lat_lon =  TorchComputeDerivativesWithLonLat()
             t_div,t_curl,t_strain = t_compute_div_curl_strain_with_lat_lon.compute_div_curl_strain(t_u,t_v,t_lat_rad,t_lon_rad,sigma=sig_div_curl)
 
             div_uv_rec_ = t_div.numpy().squeeze()
@@ -1797,7 +1806,7 @@ class LitModelUV(pl.LightningModule):
             t_u = t_u.view(-1,1,t_u.size(1),t_u.size(2))
             t_v = t_v.view(-1,1,t_v.size(1),t_v.size(2))
 
-            t_compute_div_curl_strain_with_lat_lon =  Torch_compute_derivatives_with_lon_lat()
+            t_compute_div_curl_strain_with_lat_lon =  TorchComputeDerivativesWithLonLat()
             t_div,t_curl,t_strain = t_compute_div_curl_strain_with_lat_lon.compute_div_curl_strain(t_u,t_v,t_lat_rad,t_lon_rad,sigma=sig_div_curl)
 
             div_gt_ = t_div.numpy().squeeze()
