@@ -879,6 +879,7 @@ class Model_HwithSSTBN_nolin_tanh_withlatlon(torch.nn.Module):
         return [dyout, dyout1]
 
 
+# NOTE stopped here
 class LitModelUV(pl.LightningModule):
     MODELS = {
         '4dvarnet': get_4dvarnet,
