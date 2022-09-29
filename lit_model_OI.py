@@ -19,6 +19,7 @@ import solver as NN_4DVar
 import metrics
 from metrics import save_netcdf, nrmse, nrmse_scores, mse_scores, plot_nrmse, plot_mse, plot_snr, plot_maps_oi, animate_maps, get_psd_score
 from models import Model_H, Phi_r_OI, Gradient_img
+import fuseformer as ff
 
 from lit_model_augstate import LitModelAugstate
 
@@ -34,6 +35,7 @@ def get_4dvarnet_OI(hparams):
 class LitModelOI(LitModelAugstate):
     MODELS = {
             '4dvarnet_OI': get_4dvarnet_OI,
+            'fuseformer': ff.get_fuseformer,
              }
 
     def __init__(self, *args, **kwargs):
@@ -49,6 +51,10 @@ class LitModelOI(LitModelAugstate):
                 {'params': self.model.model_H.parameters(), 'lr': self.hparams.lr_update[0]},
                 {'params': self.model.phi_r.parameters(), 'lr': 0.5 * self.hparams.lr_update[0]},
                 ])
+        elif self.model_name == 'fuseformer':
+            optimizer = opt(
+                self.model.parameters(), lr=1e-4, betas=(0., 0.99),
+            )
 
         return optimizer
 

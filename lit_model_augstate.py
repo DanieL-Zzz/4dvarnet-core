@@ -20,6 +20,7 @@ import solver as NN_4DVar
 import metrics
 from metrics import save_netcdf, nrmse, nrmse_scores, mse_scores, plot_nrmse, plot_mse, plot_snr, plot_maps, animate_maps, get_psd_score
 from models import Model_H, Model_HwithSST, Phi_r, ModelLR, Gradient_img
+import fuseformer as ff
 
 def get_4dvarnet(hparams):
     return NN_4DVar.Solver_Grad_4DVarNN(
@@ -87,10 +88,11 @@ def get_cropped_hanning_mask(patch_size, crop, **kwargs):
 class LitModelAugstate(pl.LightningModule):
 
     MODELS = {
-            '4dvarnet': get_4dvarnet,
-            '4dvarnet_sst': get_4dvarnet_sst,
-            'phi': get_phi,
-             }
+        '4dvarnet': get_4dvarnet,
+        '4dvarnet_sst': get_4dvarnet_sst,
+        'phi': get_phi,
+        'fuseformer': ff.get_fuseformer,
+    }
 
     def __init__(self,
                  hparam=None,
@@ -196,6 +198,10 @@ class LitModelAugstate(pl.LightningModule):
                                 ])
 
             return optimizer
+        elif self.model_name == 'fuseformer':
+            opt = optim.Adam(
+                self.model.parameters(), lr=1e-4, betas=(0., 0.99),
+            )
         else:
             opt = optim.Adam(self.parameters(), lr=1e-4)
         return {
