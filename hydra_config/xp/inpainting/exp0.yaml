@@ -1,0 +1,20 @@
+# @package _global_
+
+xp_name: inpainting
+params:
+  model: fuseformer
+  dT: 7
+  fuseformer:
+    stack_num: 4
+    output_size: [60, 60]
+    kernel_size: [16, 16]
+    padding: [3, 3]
+    stride: [5, 5]
+    dropout: ${params.dropout}
+lit_mod_cls: lit_model_augstate.LitModelAugstate
+datamodule:
+  resize_factor: 1
+
+defaults:
+  - /xp/inpainting/_fuseformer
+  - _self_

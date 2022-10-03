@@ -1,0 +1,17 @@
+# @package _global_
+
+xp_name: inpainting1
+params:
+  model: fuseformer
+  dT: 29
+  fuseformer:
+    stack_num: 4
+    output_size: [30, 30]  # Must be (h//4, w//4)
+    dropout: ${params.dropout}
+lit_mod_cls: lit_model_OI.LitModelOI
+datamodule:
+  resize_factor: 2
+
+defaults:
+  - /xp/inpainting/_fuseformer
+  - _self_
