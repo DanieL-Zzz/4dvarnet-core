@@ -13,19 +13,20 @@ params:
     u_var: u
     v_path: ${file_paths.natl_v_daily}
     v_var: v
+  asymptotic_term: false  # Related to the solver
   iter_update: ??? # train_strat
   nb_grad_update: ???
   lr_update: ???
   n_fourdvar_iter: ???
   weight_decay: ???
   model: ??? # sst
-  sst: ??? 
-  val_diag_freq: 5 
+  sst: ???
+  val_diag_freq: 5
   n_grad: 5
   dT: 5
   aug_state: ??? #aug
   shape_data: ???
-  shape_state: ??? 
+  shape_state: ???
   dW: 3
   dW2: 1
   sS: 4

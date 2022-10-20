@@ -160,7 +160,7 @@ def get_4dvarnet(hparams):
         Model_H(hparams.shape_state[0]),
         NN_4DVar.model_GradUpdateLSTM(
             hparams.shape_state, hparams.UsePriodicBoundary,
-            hparams.dim_grad_solver, hparams.dropout,
+            hparams.dim_grad_solver, hparams.dropout, hparams.asymptotic_term,
         ),
         hparams.norm_obs, hparams.norm_prior, hparams.shape_state,
         hparams.n_grad * hparams.n_fourdvar_iter,
@@ -227,7 +227,7 @@ def get_4dvarnet_sst(hparams):
         _sst_model,
         NN_4DVar.model_GradUpdateLSTM(
             hparams.shape_state, hparams.UsePriodicBoundary,
-            hparams.dim_grad_solver, hparams.dropout,
+            hparams.dim_grad_solver, hparams.dropout, hparams.asymptotic_term,
         ),
         hparams.norm_obs, hparams.norm_prior, hparams.shape_state,
         hparams.n_grad * hparams.n_fourdvar_iter,
