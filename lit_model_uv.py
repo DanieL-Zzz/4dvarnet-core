@@ -8,7 +8,7 @@ import hydra
 from hydra.utils import call, instantiate
 import kornia
 import numpy as np
-from omegaconf import OmegaConf
+from omegaconf import MissingMandatoryValue, OmegaConf
 import pandas as pd
 import pytorch_lightning as pl
 from scipy.ndimage import convolve1d, gaussian_filter, sobel
@@ -305,6 +305,10 @@ class LitModelUV(pl.LightningModule):
         hparams = hparam or {}
         if not isinstance(hparams, dict):
             hparams = OmegaConf.to_container(hparams, resolve=True)
+
+        for key, value in hparams.items():
+            if value == '???':
+                MissingMandatoryValue(f'Value of {key} not set')
 
         self.save_hyperparameters({**hparams, **kwargs}, logger=False)
         self.latest_metrics = {}
