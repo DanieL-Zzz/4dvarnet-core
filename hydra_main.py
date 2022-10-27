@@ -7,7 +7,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 import hydra
 import pandas as pd
 from hydra.utils import get_class, instantiate, call
-from omegaconf import OmegaConf
+from omegaconf import MissingMandatoryValue, OmegaConf
 import hydra_config
 import numpy as np
 
@@ -222,13 +222,11 @@ class FourDVarNetHydraRunner:
         :param trainer_kwargs: (Optional)
         """
 
-        if _trainer is not None:
-            _trainer.test(mod, dataloaders=self.dataloaders[dataloader])
-            return
-
+        trainer = _trainer or pl.Trainer(
+            num_nodes=1, gpus=1, accelerator=None, **trainer_kwargs
+        )
         mod = _mod or self._get_model(ckpt_path=ckpt_path)
 
-        trainer = pl.Trainer(**trainer_kwargs)
         trainer.test(mod, dataloaders=self.dataloaders[dataloader])
         return mod
 
@@ -262,6 +260,11 @@ class FourDVarNetHydraRunner:
 
 def _main(cfg):
     print(OmegaConf.to_yaml(cfg))
+
+    missing_keys = OmegaConf.missing_keys(cfg)
+    if missing_keys:
+        raise MissingMandatoryValue(missing_keys)
+
     pl.seed_everything(seed=cfg.get('seed', None))
     dm = instantiate(cfg.datamodule)
     if cfg.get('callbacks') is not None:
@@ -280,7 +283,9 @@ def _main(cfg):
     call(cfg.entrypoint, self=runner)
 
 
-main = hydra.main(config_path='hydra_config', config_name='main')(_main)
+main = hydra.main(
+    config_path='hydra_config', config_name='main', version_base=None,
+)(_main)
 
 if __name__ == '__main__':
     main()
