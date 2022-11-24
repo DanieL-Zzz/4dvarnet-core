@@ -1,0 +1,48 @@
+# @package _global_
+
+xp_name: uv_james_train
+params:
+  flag_update_training_config: true
+  sst_model: 'nolinear-tanh-bn'
+  patch_weight:
+    _target_: lit_model_uv.get_cropped_hanning_mask
+    patch_size: ${datamodule.slice_win}
+    crop:
+      time: 3
+  k_n_grad: 3
+  n_grad: 5
+  apha_grad_descent_step: 0
+  learn_fsgd_param: false  #
+  dT: 7
+  scale_dwscaling : 1.  #
+  DimAE: 50
+  dim_obs_sst_feat: 2
+  phi_param: 'unet1'  #
+  ckpt_name: 'modelUVwSSTGF-unet1-{epoch:02d}-{val_loss:.4f}'
+  save_rec_netcdf: true
+  sig_filter_laplacian: 1.
+  sig_filter_div_diag: 1.
+  use_sst_obs: false  #
+  use_sst_state: false  #
+  padding_mode: reflect  #
+  residual_wrt_geo_velocities: 0  # !
+  type_div_train_loss: 1
+  alpha_mse_ssh: 50.  #
+  alpha_mse_gssh: 0.  #
+  alpha_mse_uv: 50.
+  alpha_mse_uv_geo: 10.
+  alpha_mse_div: 0.
+  alpha_mse_strain: 0.
+  sampling_model: 'sampling-from-sst'
+  nb_feat_sampling_operator: 0
+  alpha_sampling_uv: 10.
+  thr_l1_sampling_uv: 0.10
+  scale_dwscaling_sst: 1.
+datamodule:
+  aug_train_data: True
+  resize_factor: 1
+defaults:
+  - /xp/uv/aug/with_aug_state_uv
+  - /xp/baseline/dl/d240_p240x5_s240x1
+  - /xp/uv/base_xp_uv
+  - _self_
