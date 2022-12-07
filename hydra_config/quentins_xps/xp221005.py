@@ -9,6 +9,9 @@ BASE_DEFAULTS = [
     '/xp/baseline/train_strat/const_lr_ngrad_5_3cas',
   '/splits/dc_boost_swot@datamodule',
 ]
+
+n_phis = 2
+
 XP=26
 cs.store(name='4dvarnet_OI', node={'model': '4dvarnet_OI'}, group='model', package='params')
 cs.store(name='UNet_direct', node={'model': 'UNet_direct', 'UNet_shrink_factor':2}, group='model', package='params')
@@ -21,11 +24,11 @@ cs.store(name='4dvarnet_UNet_dropout', node={'model': '4dvarnet_UNet', 'UNet_shr
 #cs.store(name='UNet_FP', node={'model': '4dvarnet_UNet', 'shrink_factor':2}, group='model', package='params')
 cs.store(name='phi_r_FP', node={'model': 'phi_r_FP', 'n_grad':1}, group='model', package='params')
 cs.store(name='phi_r_direct', node={'model': 'phi_r_FP', 'n_grad':0}, group='model', package='params')
-cs.store(name='multi_prior', node={'model': 'multi_prior', 'nb_phi':5}, group='model', package='params')
-cs.store(name='lat_lon_multi_prior', node={'params':{'model': 'lat_lon_multi_prior', 'nb_phi':5},
+cs.store(name='multi_prior', node={'model': 'multi_prior', 'nb_phi': n_phis}, group='model', package='params')
+cs.store(name='lat_lon_multi_prior', node={'params':{'model': 'lat_lon_multi_prior', 'nb_phi': n_phis},
                                             'datamodule':{
                                                 'dataset_class': {  '_target_': 'dataloading.FourDVarNetDatasetLatLon',
-                                                                '_partial_': True 
+                                                                '_partial_': True
                                                                 }
                                                             }
                                             }
@@ -33,8 +36,8 @@ cs.store(name='lat_lon_multi_prior', node={'params':{'model': 'lat_lon_multi_pri
 model = {
     #'4dvarnet_OI': '/model/4dvarnet_OI',
     #'4dvarnet_OI_sst': '/model/4dvarnet_OI_sst',
-    #'4dvarnet_UNet': '/model/4dvarnet_UNet', 
-    #'4dvarnet_UNet_sst': '/model/4dvarnet_UNet_sst', 
+    #'4dvarnet_UNet': '/model/4dvarnet_UNet',
+    #'4dvarnet_UNet_sst': '/model/4dvarnet_UNet_sst',
     #'4dvarnet_UNet_dropout': '/model/4dvarnet_UNet_dropout',
     #'UNet_direct_lowdropout': '/model/UNet_direct_lowdropout',
     #'UNet_direct_highdropout': '/model/UNet_direct_highdropout',
@@ -55,11 +58,11 @@ cs.store(name='10', node={'aug_train_data': 10}, group='aug_data', package='data
 
 aug = {
     'aug0': '/aug_data/0',
-    #'aug1': '/aug_data/1',
-    #'aug2': '/aug_data/2',
-    #'aug3': '/aug_data/3',
-    #'aug8': '/aug_data/8',
-    #'aug10': '/aug_data/10',
+    'aug1': '/aug_data/1',
+    'aug2': '/aug_data/2',
+    'aug3': '/aug_data/3',
+    'aug8': '/aug_data/8',
+    'aug10': '/aug_data/10',
 
 }
 cs.store(name='4', node={'resize_factor': 4}, group='down_samp', package='datamodule')
@@ -67,8 +70,8 @@ cs.store(name='2', node={'resize_factor': 2}, group='down_samp', package='datamo
 cs.store(name='1', node={'resize_factor': 1}, group='down_samp', package='datamodule')
 resize = {
     'ds4': '/down_samp/4',
-    #'ds2': '/down_samp/2',
-    #'ds1': '/down_samp/1',
+    'ds2': '/down_samp/2',
+    'ds1': '/down_samp/1',
 }
 
 cs.store(name='29_8', node={
@@ -92,7 +95,7 @@ cs.store(name='29_13', node={
         'crop': { 'time': 13, 'lat': '${div:20,${datamodule.resize_factor}}', 'lon':  '${div:20,${datamodule.resize_factor}}'}
     }, 'dT': 29, }, group='dT', package='params')
 dT = {
-    # 'dT29_8': '/dT/29_8',
+    'dT29_8': '/dT/29_8',
     'dT29_13': '/dT/29_13',
     'dT29_13_no_crop': '/dT/29_13_no_crop',
 }
@@ -102,20 +105,21 @@ for  defaults in product(
           #('sst', '/xp/qfebvre/xp_oi_sst'),
             ('no_sst', '/xp/qfebvre/xp_oi_cnatl'),
             #('lat_lon', '/xp/qfebvre/xp_oi_cnatl_lat_lon'),
-            
+
         ],
         #training and test areas format trainArea_testArea
-        [ #('cnatl2_x_cnatl2', '/xp/baseline/dl/dl_cnatl2'),
+        [   ('cnatl2_x_cnatl2', '/xp/baseline/dl/dl_cnatl2'),
             ('cnatl_no_crop', '/xp/baseline/dl/dl_cnatl2_no_crop'),
             ('cnatl2_gf2', '/xp/baseline/dl/dl_cnatl2_gf2'),
             ('cnatl2_osmosis','/xp/baseline/dl/dl_cnatl2_osmosis'),
             ('gf2_osmosis', '/xp/baseline/dl/dl_gf2_osmosis'),
             ('osmosis_osmosis', '/xp/baseline/dl/dl_osmosis'),
-           # ('osmosis_x_osmosis', '/xp/baseline/dl/dl_osmosis_crop'),
+            ('osmosis_x_osmosis', '/xp/baseline/dl/dl_osmosis_crop'),
             ('osmosis2_osmosis2', '/xp/baseline/dl/dl_osmosis2'),
             ('gf_gf', '/xp/baseline/dl/d200_p200x5_s200x1'),
+            ('gf_10x20', '/xp/baseline/dl/d240_p240x5_s200x1_10x20'),
             ('gfx_gf','/xp/baseline/dl/d240_p240x5_s240x1')],
-            
+
         [
             # ('swot', '/xp/qfebvre/ds/clean_swot_oi_no_swot.yaml'),
             ('swot_4nad', '/xp/qfebvre/ds/swot_four_nadirs_dc.yaml'),
