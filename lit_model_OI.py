@@ -18,7 +18,7 @@ from omegaconf import OmegaConf
 from scipy import stats
 import solver as NN_4DVar
 import metrics
-from metrics import (save_netcdf, nrmse, nrmse_scores, mse_scores, plot_nrmse, 
+from metrics import (save_netcdf, nrmse, nrmse_scores, mse_scores, plot_nrmse,
 plot_mse, plot_snr, plot_maps_oi, animate_maps, get_psd_score)
 from models import Model_H, Model_HwithSST, Phi_r_OI,Phi_r_OI_linear, Gradient_img, UNet, Phi_r_UNet, Multi_Prior, Lat_Lon_Multi_Prior
 from lit_model_augstate import LitModelAugstate
@@ -81,7 +81,7 @@ def get_4dvarnet_unet_sst(hparams):
                     hparams.dim_grad_solver, hparams.dropout),
                 hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
 
-#Direct UNet with no solver 
+#Direct UNet with no solver
 def get_UNet_direct(hparams):
     class PhiPassThrough(torch.nn.Module):
         def __init__(self):
@@ -178,7 +178,7 @@ class LitModelOI(LitModelAugstate):
 
     def diag_step(self, batch, batch_idx, log_pref='test'):
         oi, inputs_Mask, inputs_obs, targets_GT, *_= batch
-        losses, out, metrics = self(batch, phase='test')
+        losses, out, metrics = self(batch, phase=log_pref)
         loss = losses[-1]
         if loss is not None and log_pref is not None:
             self.log(f'{log_pref}_loss', loss)
@@ -200,8 +200,8 @@ class LitModelOI(LitModelAugstate):
             return {'gt'    : (targets_GT.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
                 'obs_inp'    : (inputs_obs.detach().where(inputs_Mask, torch.full_like(inputs_obs, np.nan)).cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
                 'oi'    : (oi.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
-                'pred' : (out.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr, 
-                **results, 
+                'pred' : (out.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
+                **results,
                 **weights }
 
         return {'gt'    : (targets_GT.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
@@ -229,7 +229,7 @@ class LitModelOI(LitModelAugstate):
         self.test_figs['maps_grad'] = fig_maps_grad
         self.logger.experiment.add_figure(f'{log_pref} Maps', fig_maps, global_step=self.current_epoch)
         self.logger.experiment.add_figure(f'{log_pref} Maps Grad', fig_maps_grad, global_step=self.current_epoch)
-       
+
         lamb_x, lamb_t, mu, sig = np.nan, np.nan, np.nan, np.nan
         try:
             psd_ds, lamb_x, lamb_t = metrics.psd_based_scores(self.test_xr_ds.pred, self.test_xr_ds.gt)
@@ -274,7 +274,7 @@ class LitModelOI(LitModelAugstate):
         self.x_gt = self.test_xr_ds.gt.data
         self.oi = self.test_xr_ds.oi.data
         self.obs_inp = self.test_xr_ds.obs_inp.data
-        
+
         self.x_rec = self.test_xr_ds.pred.data
         self.x_rec_ssh = self.x_rec
 
@@ -285,7 +285,7 @@ class LitModelOI(LitModelAugstate):
 
         # display map
         md = self.sla_diag(t_idx=2, log_pref=log_pref)
-       
+
         self.latest_metrics.update(md)
         self.logger.log_metrics(md, step=self.current_epoch)
 
@@ -304,7 +304,7 @@ class LitModelOI(LitModelAugstate):
             return 0.
         elif self.model_name in ['lat_lon_multi_prior']:
             return torch.mean((self.model.phi_r(state_out, latitude, longitude) - state_out) ** 2)
-        else: 
+        else:
             #same as in lit_model_augstate
             return torch.mean((self.model.phi_r(state_out) - state_out) ** 2)
 
@@ -313,7 +313,7 @@ class LitModelOI(LitModelAugstate):
              #Latitude and longitude are used for the weight matrix for the multi-prior
             if self.use_sst:
                 _, inputs_Mask, inputs_obs, targets_GT, latitude, longitude, sst_gt = batch
-    
+
             else:
                 _, inputs_Mask, inputs_obs, targets_GT, latitude, longitude = batch
 
@@ -322,11 +322,11 @@ class LitModelOI(LitModelAugstate):
             longitude = None #Passed to loss AE
             if self.use_sst:
                 _, inputs_Mask, inputs_obs, targets_GT, sst_gt = batch
-    
+
             else:
                 _, inputs_Mask, inputs_obs, targets_GT = batch
-                
- 
+
+
 
         # handle patch with no observation
         if inputs_Mask.sum().item() == 0:

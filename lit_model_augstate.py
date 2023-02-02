@@ -166,6 +166,13 @@ class LitModelAugstate(pl.LightningModule):
             state_init = [None if s is None else s.detach() for s in state]
             losses.append(_loss)
             metrics.append(_metrics)
+
+        if phase == 'val' and self.model_name == 'lat_lon_multi_prior':
+            print('>>> You\'re in!')
+            _slice = slice(-3, -1) if self.use_sst else slice(-2, None)
+            latitude, longitude = batch[_slice]
+            out = self.model.phi_r(out, latitude, longitude)
+
         return losses, out, metrics
 
     def configure_optimizers(self):

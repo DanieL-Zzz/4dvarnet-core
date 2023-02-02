@@ -503,16 +503,16 @@ class FP_Solver(nn.Module):
         self.phi_r = phi_r
         with torch.no_grad():
             self.n_grad = int(n_iter_grad)
-           
+
 
     def forward(self, x, yobs, mask, *internal_state):
-        
+
         return self.solve(x, yobs, mask, *internal_state)
-        
+
 
     def solve(self, x_0, obs, mask, hidden=None, cell=None, normgrad_=None):
         x_k = torch.mul(x_0 ,1.)
-        for _ in range(self.n_grad): 
+        for _ in range(self.n_grad):
             x_k = self.solver_step(x_k, obs, mask, cell, normgrad_, )
             x_k = torch.mul(x_k ,1.)
         x_k = self.phi_r(x_k)
@@ -527,5 +527,5 @@ class FP_Solver(nn.Module):
         x_proj = self.phi_r(x_k) * unmeasured_mask
         #combine measured and interpolated data
         x_k_plus_1 = x_proj + y_obs
-    
+
         return x_k_plus_1
