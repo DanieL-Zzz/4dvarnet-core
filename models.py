@@ -258,7 +258,7 @@ class DoubleConv(torch.nn.Module):
         super().__init__()
         if not mid_channels:
             mid_channels = out_channels
-            
+
         if activation == 'relu':
             self.double_conv = torch.nn.Sequential(
                     torch.nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
@@ -287,7 +287,7 @@ class DoubleConv(torch.nn.Module):
                     torch.nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
                     torch.nn.BatchNorm2d(out_channels),
                     torch.nn.LogSigmoid(inplace=True) )
-        
+
     def forward(self, x):
         return self.double_conv(x)
 
@@ -340,9 +340,9 @@ class OutConv(torch.nn.Module):
 
     def forward(self, x):
         return self.conv(x)
-    
+
 class UNet(torch.nn.Module):
-    '''classic UNet model for comparison. Taken from 
+    '''classic UNet model for comparison. Taken from
     https://github.com/CIA-Oceanix/4dvarnet-forecast/blob/35f55997b40324b2b89eacbd73889962f9a9bd0f/unet.py#L229
     shrink factor reduces the number of conv layers, must be power of 2'''
     def __init__(self, n_channels, n_classes, dropout_rate, bilinear=False, shrink_factor = 2):
@@ -356,7 +356,7 @@ class UNet(torch.nn.Module):
         self.down2 = Down(128//shrink_factor, 256//shrink_factor)
         self.down3 = Down(256//shrink_factor, 512//shrink_factor)
         factor = 2 if bilinear else 1
-        
+
         #self.down4 = Down(512, 1024 // factor)
         #self.up1 = Up(1024, 512 // factor, bilinear)
         self.up2 = Up(512//shrink_factor, 256//(shrink_factor * factor), bilinear)
@@ -378,7 +378,7 @@ class UNet(torch.nn.Module):
         x = self.dropout(self.up3(x3, x2))
         x = self.dropout(self.up4(x, x1))
         out = self.outc(x)
-        
+
         return out
 
 class Phi_r_UNet(torch.nn.Module):
@@ -464,7 +464,7 @@ class Encoder_OI_linear(torch.nn.Module):
     def forward(self, x_in):
         x = self.nn(x_in)
         return x
-    
+
 
 #MULTI PRIOR SECTION
 class Weight_Network(torch.nn.Module):
@@ -494,6 +494,11 @@ class Weight_Network(torch.nn.Module):
         #x_out = interpolate(x_out, (self.shape_data[2],self.shape_data[1]), mode='bilinear', align_corners=True)
         return x_out
 
+def get_weight(index, this_one):
+    if index == 0:
+        return torch.ones_like(this_one)
+    return torch.zeros_like(this_one)
+
 #Multi prior that uses the state to calculate the weights
 class Multi_Prior(torch.nn.Module):
     def __init__(self, shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi=2, stochastic=False):
@@ -502,7 +507,7 @@ class Multi_Prior(torch.nn.Module):
         self.weights = Weight_Network(shape_data, nb_phi, dw, shape_data[0])
         self.nb_phi = nb_phi
         self.shape_data = shape_data
-    
+
     def get_phi_list(self, shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi, stochastic=False):
         phi_list = []
         for i in range(nb_phi):
@@ -522,10 +527,13 @@ class Multi_Prior(torch.nn.Module):
                 phi_r = phi_r.to(x_in)
                 start = idx * self.shape_data[0]
                 stop = (idx + 1) * self.shape_data[0]
-                weights_dict[f'phi{idx}_weight'] = x_weights[:,start:stop, :,:]
+
+                weight = get_weight(idx, x_weights[:,start:stop, :,:])
+
+                weights_dict[f'phi{idx}_weight'] = weight
                 results_dict[f'phi{idx}_out'] =  phi_r(x_in).detach().to('cpu')
         return results_dict, weights_dict
-        
+
     def forward(self, x_in):
         print('###X_IN SHAPE', x_in.shape)
         x_out = torch.zeros_like(x_in).to(x_in)
@@ -536,8 +544,11 @@ class Multi_Prior(torch.nn.Module):
             phi_r = phi_r.to(x_in)
             start = idx * self.shape_data[0]
             stop = (idx + 1) * self.shape_data[0]
+
+            weight = get_weight(idx, x_weights[:,start:stop, :,:])
+
             #Multiply the phi by its weights, add to final sum
-            x_out = torch.add(x_out, torch.mul( x_weights[:,start:stop, :,:],phi_r(x_in)))
+            x_out = torch.add(x_out, torch.mul(weight, phi_r(x_in)))
         return x_out
 
 
@@ -547,7 +558,7 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
         print('####NB PHI', nb_phi)
         super().__init__(shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi, stochastic=False)
         self.weights = Weight_Network(shape_data, nb_phi, dw, 2)
-    
+
     #gives a list of outputs for the phis for validation step
     def get_intermediate_results(self, x_in, latitude, longitude):
         with torch.no_grad():
@@ -562,10 +573,13 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
                 phi_r = phi_r.to(x_in)
                 start = idx * self.shape_data[0]
                 stop = (idx + 1) * self.shape_data[0]
-                weights_dict[f'phi{idx}_weight'] = x_weights[:,start:stop, :,:]
+
+                weight = get_weight(idx, x_weights[:,start:stop, :,:])
+
+                weights_dict[f'phi{idx}_weight'] = weight
                 results_dict[f'phi{idx}_out'] =  phi_r(x_in).detach().to('cpu')
         return results_dict, weights_dict
-    
+
     def forward(self, x_in, latitude, longitude):
         x_out = torch.zeros_like(x_in).to(x_in)
         self.weights= self.weights.to(x_in)
@@ -576,8 +590,9 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
             phi_r = phi_r.to(x_in)
             start = idx * self.shape_data[0]
             stop = (idx + 1) * self.shape_data[0]
-            #Multiply the phi by its weights, add to final sum
-            x_out = torch.add(x_out, torch.mul( x_weights[:,start:stop, :,:],phi_r(x_in)))
-        return x_out
 
-        
+            weight = get_weight(idx, x_weights[:,start:stop, :,:])
+
+            #Multiply the phi by its weights, add to final sum
+            x_out = torch.add(x_out, torch.mul(weight, phi_r(x_in)))
+        return x_out
