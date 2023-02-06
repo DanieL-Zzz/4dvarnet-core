@@ -1,0 +1,35 @@
+# @package _global_
+
+xp_name: baseline_10x20
+params:
+  dT: 29
+  patch_weight:
+    crop:
+      time: 13
+      lat: ${div:20,${datamodule.resize_factor}}
+      lon: ${div:20,${datamodule.resize_factor}}
+  k_n_grad: 3
+  n_grad: 3
+  val_diag_freq: 5
+  padding_mode: reflect
+  alpha_mse_ssh: 50. # loss
+  alpha_mse_gssh: 1000.
+  norm_obs: l2
+  norm_prior: l2
+
+  opt:
+    _target_: torch.optim.Adam
+    lr: 0.
+datamodule:
+  pp: std
+  aug_train_data: true
+  resize_factor: 4
+
+defaults:
+  - /xp/base_xp
+  - /splits/dc_boost_swot@datamodule
+  - /xp/baseline/aug/without_aug_state
+  - /xp/baseline/dl/d240_p240x5_s200x1_10x20
+  - /xp/baseline/sst/without_sst
+  - /xp/baseline/train_strat/const_lr_ngrad_5_3cas
+  - _self_
