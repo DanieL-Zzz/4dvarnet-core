@@ -497,16 +497,14 @@ class Weight_Network(torch.nn.Module):
         return x_out
 
 def get_weight(index, this_one):
-    if index > 0:
-        return this_one
-    return torch.ones_like(this_one) - this_one
+    return .5 * torch.ones_like(this_one)
 
 #Multi prior that uses the state to calculate the weights
 class Multi_Prior(torch.nn.Module):
     def __init__(self, shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi=2, stochastic=False):
         super().__init__()
         self.phi_list = self.get_phi_list(shape_data[0], DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi, stochastic)
-        self.weights = Weight_Network(shape_data, nb_phi, dw, shape_data[0])
+        # self.weights = Weight_Network(shape_data, nb_phi, dw, shape_data[0])
         self.nb_phi = nb_phi
         self.shape_data = shape_data
 
@@ -520,18 +518,18 @@ class Multi_Prior(torch.nn.Module):
     def get_intermediate_results(self, x_in):
         with torch.no_grad():
             x_in = x_in.to(x_in)
-            self.weights = self.weights.to(x_in)
+            # self.weights = self.weights.to(x_in)
             #Each element of these dicts correspond to a phi
             results_dict = {}
             weights_dict = {}
-            x_weights = self.weights(x_in).detach().to('cpu')
+            # x_weights = self.weights(x_in).detach().to('cpu')
             for idx, phi_r in enumerate(self.phi_list):
                 phi_r = phi_r.to(x_in)
                 start = idx * self.shape_data[0]
                 stop = (idx + 1) * self.shape_data[0]
 
                 phi_out = phi_r(x_in).detach().to('cpu')
-                weight = get_weight(idx, x_weights[:,start:stop, :,:])
+                weight = get_weight(idx, phi_out)  # x_weights[:,start:stop, :,:])
 
                 weights_dict[f'phi{idx}_weight'] = weight
                 results_dict[f'phi{idx}_out'] =  phi_out
@@ -540,8 +538,8 @@ class Multi_Prior(torch.nn.Module):
     def forward(self, x_in):
         print('###X_IN SHAPE', x_in.shape)
         x_out = torch.zeros_like(x_in).to(x_in)
-        self.weights= self.weights.to(x_in)
-        x_weights = self.weights(x_in)
+        # self.weights= self.weights.to(x_in)
+        # x_weights = self.weights(x_in)
         for idx, phi_r in enumerate(self.phi_list):
             #Get the indices corresponding to the weights for a given phi
             phi_r = phi_r.to(x_in)
@@ -549,7 +547,7 @@ class Multi_Prior(torch.nn.Module):
             stop = (idx + 1) * self.shape_data[0]
 
             phi_out = phi_r(x_in)
-            weight = get_weight(idx, x_weights[:,start:stop, :,:])
+            weight = get_weight(idx, phi_out)  # x_weights[:,start:stop, :,:])
 
             #Multiply the phi by its weights, add to final sum
             x_out = torch.add(x_out, torch.mul(weight, phi_out))
@@ -561,25 +559,19 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
     def __init__(self, shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi=2, stochastic=False):
         print('####NB PHI', nb_phi)
         super().__init__(shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi, stochastic=False)
-        self.weights = Weight_Network(shape_data, nb_phi, dw, 2)
+        # self.weights = Weight_Network(shape_data, nb_phi, dw, 2)
         self.previous_weight = None
 
     #gives a list of outputs for the phis for validation step
     def get_intermediate_results(self, x_in, latitude, longitude):
         with torch.no_grad():
             x_in = x_in.to(x_in)
-            self.weights = self.weights.to(x_in)
+            # self.weights = self.weights.to(x_in)
             #Each element of these dicts correspond to a phi
             results_dict = {}
             weights_dict = {}
             lat_lon_stack = torch.stack((latitude, longitude), dim=1)
-            x_weights = self.weights(lat_lon_stack).detach().to('cpu')
-
-            if self.previous_weight is not None:
-                _mse = ((x_weights - self.previous_weight)**2).sum() / torch.numel(x_weights)
-                print('... MSE:', _mse.item())
-                input()
-            self.previous_weight = x_weights.detach().cpu()
+            # x_weights = self.weights(lat_lon_stack).detach().to('cpu')
 
             for idx, phi_r in enumerate(self.phi_list):
                 phi_r = phi_r.to(x_in)
@@ -587,7 +579,7 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
                 stop = (idx + 1) * self.shape_data[0]
 
                 phi_out = phi_r(x_in).detach().to('cpu')
-                weight = get_weight(idx, x_weights[:,start:stop, :,:])
+                weight = get_weight(idx, phi_out)  # x_weights[:,start:stop, :,:])
 
                 weights_dict[f'phi{idx}_weight'] = weight
                 results_dict[f'phi{idx}_out'] =  phi_out
@@ -595,9 +587,9 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
 
     def forward(self, x_in, latitude, longitude):
         x_out = torch.zeros_like(x_in).to(x_in)
-        self.weights= self.weights.to(x_in)
+        # self.weights= self.weights.to(x_in)
         lat_lon_stack = torch.stack((latitude, longitude), dim=1)
-        x_weights = self.weights(lat_lon_stack)
+        # x_weights = self.weights(lat_lon_stack)
         for idx, phi_r in enumerate(self.phi_list):
             #Get the indices corresponding to the weights for a given phi
             phi_r = phi_r.to(x_in)
@@ -605,7 +597,7 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
             stop = (idx + 1) * self.shape_data[0]
 
             phi_out = phi_r(x_in)
-            weight = get_weight(idx, x_weights[:,start:stop, :,:])
+            weight = get_weight(idx, phi_out)  # x_weights[:,start:stop, :,:])
 
             #Multiply the phi by its weights, add to final sum
             x_out = torch.add(x_out, torch.mul(weight, phi_out))
