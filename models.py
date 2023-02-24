@@ -497,7 +497,9 @@ class Weight_Network(torch.nn.Module):
         return x_out
 
 def get_weight(index, this_one):
-    return .5 * torch.ones_like(this_one)
+    if index > 0:
+        return torch.zeros_like(this_one)
+    return torch.ones_like(this_one)
 
 #Multi prior that uses the state to calculate the weights
 class Multi_Prior(torch.nn.Module):
