@@ -1,0 +1,161 @@
+# @package _global_
+
+entrypoint:
+  # _target_: hydra_main.FourDVarNetHydraRunner.train
+  # ckpt_path: null
+  # max_epochs: 350
+  progress_bar_refresh_rate: 5
+  limit_train_batches: 1.0
+xp_name: qxp22_5nad_aug3_ds1
+params:
+  nb_phi: 2
+  files_cfg:
+    oi_path: ${file_paths.oi_4nadir}
+    oi_var: ssh_mod
+    obs_mask_path: ${file_paths.new_noisy_swot}
+    obs_mask_var: five_nadirs
+    gt_path: ${file_paths.natl_ssh_daily}
+    gt_var: ssh
+  iter_update:
+  - 0
+  - 200
+  - 400
+  - 600
+  - 1000
+  - 1500
+  - 8000
+  nb_grad_update:
+  - 5
+  - 5
+  - 5
+  - 5
+  - 5
+  - 5
+  - 5
+  - 5
+  - 5
+  lr_update:
+  - 0.001
+  - 0.001
+  - 0.001
+  - 0.001
+  - 0.001
+  - 0.001
+  - 0.001
+  - 0.001
+  - 0.001
+  n_fourdvar_iter: 3
+  weight_decay: ???
+  model: 4dvarnet_OI
+  sst: false
+  val_diag_freq: 5
+  n_grad: 5
+  dT: 24
+  aug_state: false
+  shape_data:
+  - ${datamodule.slice_win.time}
+  - ${datamodule.slice_win.lon}
+  - ${datamodule.slice_win.lat}
+  shape_state:
+  - ${datamodule.slice_win.time}
+  - ${datamodule.slice_win.lon}
+  - ${datamodule.slice_win.lat}
+  dW: 3
+  dW2: 1
+  sS: 4
+  stochastic: false
+  animate: false
+  UsePriodicBoundary: false
+  nbBlocks: 1
+  DimAE: 50
+  dim_grad_solver: 150
+  dropout: 0.25
+  dropout_phi_r: 0.0
+  alpha_mse_ssh: 50.0
+  alpha_mse_gssh: 1000.0
+  alpha_proj: 0.5
+  alpha_sr: 0.5
+  alpha_lr: 0.5
+  automatic_optimization: true
+  ckpt_name: modelCalSLAInterpGF-{epoch:02d}-{val_loss:.4f}
+  norm_obs: l2
+  norm_prior: l2
+  patch_weight:
+    _target_: lit_model_augstate.get_cropped_hanning_mask
+    patch_size: ${datamodule.slice_win}
+    crop:
+      lat: ${div:20,${datamodule.resize_factor}}
+      lon: ${div:20,${datamodule.resize_factor}}
+      time: 8
+  median_filter_width: 1
+  test_domain:
+    lat:
+      _target_: builtins.slice
+      _args_:
+      - 33.0
+      - 43.0
+    lon:
+      _target_: builtins.slice
+      _args_:
+      - -65.0
+      - -55.0
+  k_n_grad: 3
+  padding_mode: reflect
+lit_mod_cls: lit_model_OI.LitModelOI
+datamodule:
+  _target_: dataloading.FourDVarNetDataModule
+  slice_win:
+    lat: ${div:240,${datamodule.resize_factor}}
+    lon: ${div:240,${datamodule.resize_factor}}
+    time: ${params.dT}
+  strides:
+    lat: ${div:20,${datamodule.resize_factor}}
+    lon: ${div:20,${datamodule.resize_factor}}
+    time: 1
+  train_slices:
+  - _target_: builtins.slice
+    _args_:
+    - '2013-02-04'
+    - '2013-09-30'
+  test_slices:
+  - _target_: builtins.slice
+    _args_: ${adjust_testslices:['2012-10-22', '2012-12-02'],${params.dT}}
+  val_slices:
+  - _target_: builtins.slice
+    _args_:
+    - '2013-01-01'
+    - '2013-02-04'
+  oi_path: ${params.files_cfg.oi_path}
+  oi_var: ${params.files_cfg.oi_var}
+  obs_mask_path: ${params.files_cfg.obs_mask_path}
+  obs_mask_var: ${params.files_cfg.obs_mask_var}
+  gt_path: ${params.files_cfg.gt_path}
+  gt_var: ${params.files_cfg.gt_var}
+  sst_path: null
+  sst_var: null
+  aug_train_data: 3
+  resolution: 1/20
+  resize_factor: 1
+  dl_kwargs:
+    batch_size: 4
+    num_workers: 2
+  dataset_class:
+    _target_: dataloading.FourDVarNetDataset
+    _partial_: true
+  dim_range:
+    lat:
+      _target_: builtins.slice
+      _args_:
+      - 32.0
+      - 44.0
+    lon:
+      _target_: builtins.slice
+      _args_:
+      - -66.0
+      - -54.0
+logger:
+  _target_: pytorch_lightning.loggers.TensorBoardLogger
+  save_dir: .
+  name: null
+  default_hp_metric: false
+seed: 0
