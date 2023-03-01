@@ -91,8 +91,19 @@ class FourDVarNetHydraRunner:
                                                     var_Tr=self.var_Tr,
                                                     var_Tt=self.var_Tt,
                                                     var_Val=self.var_Val,
+                                                    _lat_lon=True,
                                                     )
-
+            _mod = self.lit_cls.load_from_checkpoint(ckpt_path,
+                                                    hparam=self.cfg,
+                                                    strict=False,
+                                                    test_domain=self.cfg.test_domain,
+                                                    mean_Tr=self.mean_Tr,
+                                                    mean_Tt=self.mean_Tt,
+                                                    mean_Val=self.mean_Val,
+                                                    var_Tr=self.var_Tr,
+                                                    var_Tt=self.var_Tt,
+                                                    var_Val=self.var_Val,
+                                                    )
         else:
             mod = self.lit_cls(hparam=self.cfg,
                                mean_Tr=self.mean_Tr,
@@ -103,6 +114,77 @@ class FourDVarNetHydraRunner:
                                var_Val=self.var_Val,
                                test_domain=self.cfg.test_domain,
                                )
+
+        ##################################################
+        print('\n---- IN _get_model ----\n')
+
+        print('>>> ckpt_path:', ckpt_path, '\n')
+
+        print('>>> mod (id, type):            ', id(mod), type(mod))
+        print('>>> mod.model (id, type):', id(mod.model), type(mod.model))
+        print(
+              '>>> mod.model.phi_r (id, type):',
+            id(mod.model.phi_r), type(mod.model.phi_r)
+        )
+        print('>>> _mod (id, type):           ', id(_mod), type(_mod))
+        print('>>> _mod.model (id, type):', id(_mod.model), type(_mod.model))
+        print(
+              '>>> _mod.model.phi_r (id, type):',
+            id(_mod.model.phi_r), type(_mod.model.phi_r), '\n'
+        )
+
+        print('>>> TRANSFERING MODEL FROM _mod TO mod\n')
+        mod.model.phi_r = _mod.model.phi_r
+        mod.model.model_H = _mod.model.model_H
+        mod.model.model_Grad = _mod.model.model_Grad
+        mod.model.model_VarCost = _mod.model.model_VarCost
+
+        print('>>> mod.model (id, type):', id(mod.model), type(mod.model))
+        print(
+              '>>> mod.model.phi_r (id, type):',
+            id(mod.model.phi_r), type(mod.model.phi_r)
+        )
+        print('>>> _mod.model (id, type):', id(_mod.model), type(_mod.model))
+        print(
+              '>>> _mod.model.phi_r (id, type):',
+            id(_mod.model.phi_r), type(_mod.model.phi_r), '\n'
+        )
+
+        print('>>> INSTANTIATE mp = Lat_Lon_Multi_Prior(..)')
+        from models import Lat_Lon_Multi_Prior
+        mp = Lat_Lon_Multi_Prior(
+            self.cfg.shape_state,
+            self.cfg.DimAE,
+            self.cfg.dW,
+            self.cfg.dW2,
+            self.cfg.sS,
+            self.cfg.nbBlocks,
+            self.cfg.dropout_phi_r,
+            nb_phi=self.cfg.nb_phi,
+        )
+        print('>>> mp (id, type):             ', id(mp), type(mp))
+        print('>>> mp.phi_list (id, type):')
+        for _p in mp.phi_list:
+            print('...                            ', id(_p), type(_p))
+        print()
+
+        print('>>> PERFORMING mp.phi_list[0] <- mod.model.phi_r')
+        mp.phi_list[0] = mod.model.phi_r
+        print('>>> mp.phi_list (id, type):')
+        for _p in mp.phi_list:
+            print('...                            ', id(_p), type(_p))
+        print()
+
+        print('>>> PERFORMING mod.model.phi_r <- mp')
+        mod.model.phi_r = mp
+        print(
+            '>>> mod.model.phi_r (id, type):',
+            id(mod.model.phi_r), type(mod.model.phi_r), '\n'
+        )
+
+        print('>>> LEAVING _get_model')
+        ##################################################
+
         return mod
 
     def train(self, ckpt_path=None, **trainer_kwargs):

@@ -140,7 +140,7 @@ datamodule:
     batch_size: 4
     num_workers: 2
   dataset_class:
-    _target_: dataloading.FourDVarNetDataset
+    _target_: dataloading.FourDVarNetDatasetLatLon
     _partial_: true
   dim_range:
     lat:
