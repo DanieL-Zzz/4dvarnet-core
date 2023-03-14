@@ -172,6 +172,7 @@ class Phi_r_OI(torch.nn.Module):
 
     def get_intermediate_output(self, x):
         with torch.no_grad():
+            self = self.to(x)
             return self(x).detach().cpu()
 
 class Model_H(torch.nn.Module):
