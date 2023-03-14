@@ -170,6 +170,10 @@ class Phi_r_OI(torch.nn.Module):
         x = self.decoder(x)
         return x
 
+    def get_intermediate_output(self, x):
+        with torch.no_grad():
+            return self(x).detach().cpu()
+
 class Model_H(torch.nn.Module):
     def __init__(self, shape_data):
         super(Model_H, self).__init__()
