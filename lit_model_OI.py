@@ -61,13 +61,13 @@ class LitModelOI(LitModelAugstate):
             self.log(f'{log_pref}_mse', metrics[-1]["mse"] / self.var_Tt, on_step=False, on_epoch=True, prog_bar=True)
             self.log(f'{log_pref}_mseG', metrics[-1]['mseGrad'] / metrics[-1]['meanGrad'], on_step=False, on_epoch=True, prog_bar=True)
 
-        _loss, out, state, _metrics = self.compute_loss(batch, 'test', state_init=[None])
+        # _loss, out, state, _metrics = self.compute_loss(batch, 'test', state_init=[None])
 
         return {
             'gt': (targets_GT.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
             'obs_inp': (inputs_obs.detach().where(inputs_Mask, torch.full_like(inputs_obs, np.nan)).cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
             'pred': (out.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
-            'phi(x)': self.model.phi_r.get_intermediate_output(state[0].detach())
+            'phi(x)': self.model.phi_r.get_intermediate_output(out.detach().cpu())
         }
 
     def sla_diag(self, t_idx=3, log_pref='test'):
