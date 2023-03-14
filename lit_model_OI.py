@@ -65,7 +65,7 @@ class LitModelOI(LitModelAugstate):
 
         print('>>> type(out):', type(out), out.shape, out.dtype)
         print('>>> type(state[0]):', type(state[0]), state[0].shape, state[0].dtype)
-        print('>>> =?', out == state[0])
+        print('>>> =?', torch.all(out == state[0]))
         input()
         raise Exception()
 
