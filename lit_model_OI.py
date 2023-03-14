@@ -63,9 +63,10 @@ class LitModelOI(LitModelAugstate):
 
         _loss, out, state, _metrics = self.compute_loss(batch, 'test', state_init=[None])
 
-        print('>>> type(out):', type(out))
-        print('>>> type(state[0]):', type(state[0]))
+        print('>>> type(out):', type(out), out.shape, out.dtype)
+        print('>>> type(state[0]):', type(state[0]), state[0].shape, state[0].dtype)
         input()
+        raise Exception()
 
         return {
             'gt': (targets_GT.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
