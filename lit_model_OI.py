@@ -190,36 +190,57 @@ class LitModelOI(LitModelAugstate):
         oi, inputs_Mask, inputs_obs, targets_GT, *_= batch
         losses, out, metrics = self(batch, phase='test')
         loss = losses[-1]
+
         if loss is not None and log_pref is not None:
             self.log(f'{log_pref}_loss', loss)
-            self.log(f'{log_pref}_mse', metrics[-1]["mse"] / self.var_Tt, on_step=False, on_epoch=True, prog_bar=True)
-            self.log(f'{log_pref}_mseG', metrics[-1]['mseGrad'] / metrics[-1]['meanGrad'], on_step=False, on_epoch=True, prog_bar=True)
-        inp_masker = (inputs_obs.detach().where(inputs_Mask, torch.full_like(inputs_obs, np.nan)).cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr
+            self.log(
+                f'{log_pref}_mse',
+                metrics[-1]["mse"] / self.var_Tt,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
+            )
+            self.log(
+                f'{log_pref}_mseG',
+                metrics[-1]['mseGrad'] / metrics[-1]['meanGrad'],
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
+            )
+
+        # Destandardise function
+        _d = lambda X: X.detach().cpu() * np.sqrt(self.var_Tr) + self.mean_Tr
+
         if self.model_name in ['multi_prior', 'lat_lon_multi_prior']:
-
-
-            #adding model weights and phi outputs to test outputs
-            #Getting the state from the batch
-            if self.model_name in ['lat_lon_multi_prior']:
-                oi, inputs_Mask, inputs_obs, targets_GT, latitude, longitude, *_= batch
-                _loss, out, state, _metrics = self.compute_loss(batch, phase='test', state_init=[None])
-                results, weights = self.model.phi_r.get_intermediate_results(state[0].detach(), latitude, longitude)
+            if self.model_name == 'lat_lon_multi_prior':
+                oi, inputs_Mask, inputs_obs, targets_GT, latitude, longitude, *_ = batch
+                results, weights = self.model.phi_r.get_intermediate_results(
+                    out.detach(), latitude, longitude,
+                )
             else:
-                _loss, out, state, _metrics = self.compute_loss(batch, phase='test', state_init=[None])
-                results, weights = self.model.phi_r.get_intermediate_results(state[0].detach())
-            return {'gt'    : (targets_GT.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
-                'obs_inp'    : (inputs_obs.detach().where(inputs_Mask, torch.full_like(inputs_obs, np.nan)).cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
-                'oi'    : (oi.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
-                'pred' : (out.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
+                results, weights = self.model.phi_r.get_intermediate_results(out.detach())
+
+            return {
+                'gt': _d(targets_GT),
+                'obs_inp': _d(
+                    inputs_obs
+                    .where(inputs_Mask, torch.full_like(inputs_obs, np.nan))
+                ),
+                'oi': _d(oi),
+                'pred': _d(out),
                 **results,
-                **weights }
+                **weights,
+            }
 
-        return {'gt'    : (targets_GT.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
-                'obs_inp'    : (inputs_obs.detach().where(inputs_Mask, torch.full_like(inputs_obs, np.nan)).cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
-                'oi'    : (oi.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
-                'pred' : (out.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr}
-
-
+        return {
+            'gt': _d(targets_GT),
+            'obs_inp': _d(
+                inputs_obs
+                .where(inputs_Mask, torch.full_like(inputs_obs, np.nan))
+            ),
+            'oi': _d(oi),
+            'pred': _d(out),
+        }
 
 
     def sla_diag(self, t_idx=3, log_pref='test'):
