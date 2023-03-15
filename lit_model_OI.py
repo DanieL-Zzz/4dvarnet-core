@@ -192,11 +192,11 @@ class LitModelOI(LitModelAugstate):
             #Getting the state from the batch
             if self.model_name in ['lat_lon_multi_prior']:
                 oi, inputs_Mask, inputs_obs, targets_GT, latitude, longitude, *_= batch
-                _loss, out, state, _metrics = self.compute_loss(batch, phase='test', state_init=[None])
-                results, weights = self.model.phi_r.get_intermediate_results(state[0].detach(), latitude, longitude)
+                # _loss, out, state, _metrics = self.compute_loss(batch, phase='test', state_init=[None])
+                results, weights = self.model.phi_r.get_intermediate_results(out.detach(), latitude, longitude)
             else:
-                _loss, out, state, _metrics = self.compute_loss(batch, phase='test', state_init=[None])
-                results, weights = self.model.phi_r.get_intermediate_results(state[0].detach())
+                # _loss, out, state, _metrics = self.compute_loss(batch, phase='test', state_init=[None])
+                results, weights = self.model.phi_r.get_intermediate_results(out.detach())
             return {'gt'    : (targets_GT.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
                 'obs_inp'    : (inputs_obs.detach().where(inputs_Mask, torch.full_like(inputs_obs, np.nan)).cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
                 'oi'    : (oi.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
