@@ -81,42 +81,48 @@ class FourDVarNetHydraRunner:
         """
         print('get_model: ', ckpt_path)
         if ckpt_path:
-            mod = self.lit_cls.load_from_checkpoint(ckpt_path,
-                                                    hparam=self.cfg,
-                                                    strict=False,
-                                                    test_domain=self.cfg.test_domain,
-                                                    mean_Tr=self.mean_Tr,
-                                                    mean_Tt=self.mean_Tt,
-                                                    mean_Val=self.mean_Val,
-                                                    var_Tr=self.var_Tr,
-                                                    var_Tt=self.var_Tt,
-                                                    var_Val=self.var_Val,
-                                                    _lat_lon=True,
-                                                    )
-            _mod = self.lit_cls.load_from_checkpoint(ckpt_path,
-                                                    hparam=self.cfg,
-                                                    strict=False,
-                                                    test_domain=self.cfg.test_domain,
-                                                    mean_Tr=self.mean_Tr,
-                                                    mean_Tt=self.mean_Tt,
-                                                    mean_Val=self.mean_Val,
-                                                    var_Tr=self.var_Tr,
-                                                    var_Tt=self.var_Tt,
-                                                    var_Val=self.var_Val,
-                                                    )
+            mod = self.lit_cls.load_from_checkpoint(
+                ckpt_path,
+                hparam=self.cfg,
+                strict=False,
+                test_domain=self.cfg.test_domain,
+                mean_Tr=self.mean_Tr,
+                mean_Tt=self.mean_Tt,
+                mean_Val=self.mean_Val,
+                var_Tr=self.var_Tr,
+                var_Tt=self.var_Tt,
+                var_Val=self.var_Val,
+                _lat_lon=True,
+            )
         else:
-            mod = self.lit_cls(hparam=self.cfg,
-                               mean_Tr=self.mean_Tr,
-                               mean_Tt=self.mean_Tt,
-                               mean_Val=self.mean_Val,
-                               var_Tr=self.var_Tr,
-                               var_Tt=self.var_Tt,
-                               var_Val=self.var_Val,
-                               test_domain=self.cfg.test_domain,
-                               )
+            mod = self.lit_cls(
+                hparam=self.cfg,
+                mean_Tr=self.mean_Tr,
+                mean_Tt=self.mean_Tt,
+                mean_Val=self.mean_Val,
+                var_Tr=self.var_Tr,
+                var_Tt=self.var_Tt,
+                var_Val=self.var_Val,
+                test_domain=self.cfg.test_domain,
+            )
 
-        ##################################################
-        print('\n---- IN _get_model ----\n')
+        return mod
+
+    def _turn_OI_to_MP(self, mod, ckpt_path):
+        _mod = self.lit_cls.load_from_checkpoint(
+            ckpt_path,
+            hparam=self.cfg,
+            strict=False,
+            test_domain=self.cfg.test_domain,
+            mean_Tr=self.mean_Tr,
+            mean_Tt=self.mean_Tt,
+            mean_Val=self.mean_Val,
+            var_Tr=self.var_Tr,
+            var_Tt=self.var_Tt,
+            var_Val=self.var_Val,
+        )
+
+        print('\n---- IN  _turn_OI_to_MP ----\n')
 
         print('>>> ckpt_path:', ckpt_path, '\n')
 
@@ -182,8 +188,9 @@ class FourDVarNetHydraRunner:
             id(mod.model.phi_r), type(mod.model.phi_r), '\n'
         )
 
-        print('>>> LEAVING _get_model')
-        ##################################################
+        print(mod)
+
+        print('>>> LEAVING _turn_OI_to_MP')
 
         return mod
 
