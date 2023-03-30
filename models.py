@@ -530,15 +530,17 @@ class Multi_Prior(torch.nn.Module):
             results_dict = {}
             weights_dict = {}
 
+            _weights = []
+            for i in range(len(self.phi_list)):
+                weight = self.weights_list[i].to(x_in)
+                _weights.append(weight(x_in).detach().to('cpu'))
+            _normaliser = sum(_weights).detach().to('cpu')
+
             for i in range(len(self.phi_list)):
                 phi_r = self.phi_list[i].to(x_in)
-                weight = self.weights_list[i].to(x_in)
 
-                phi_out = phi_r(x_in).detach().to('cpu')
-                weight_out = weight(x_in).detach().to('cpu')
-
-                weights_dict[f'phi{i}_weight'] = weight_out
-                results_dict[f'phi{i}_out'] =  phi_out
+                weights_dict[f'phi{i}_weight'] = _weights[i] / _normaliser
+                results_dict[f'phi{i}_out'] =  phi_r(x_in).detach().to('cpu')
 
         return results_dict, weights_dict
 
@@ -546,12 +548,17 @@ class Multi_Prior(torch.nn.Module):
         print('###X_IN SHAPE', x_in.shape)
         x_out = torch.zeros_like(x_in).to(x_in)
 
+        _weights = []
+        for i in range(len(self.phi_list)):
+            weight = self.weights_list[i].to(x_in)
+            _weights.append(weight(x_in))
+        _normaliser = sum(_weights)
+
         for i in range(len(self.phi_list)):
             phi_r = self.phi_list[i].to(x_in)
-            weight = self.weights_list[i].to(x_in)
-
             phi_out = phi_r(x_in)
-            weight_out = weight(x_in)
+
+            weight_out = _weights[i] / _normaliser
 
             x_out = torch.add(x_out, torch.mul(weight_out, phi_out))
 
@@ -572,15 +579,17 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
             results_dict = {}
             weights_dict = {}
 
+            _weights = []
+            for i in range(len(self.phi_list)):
+                weight = self.weights_list[i].to(x_in)
+                _weights.append(weight(lat_lon_stack).detach().to('cpu'))
+            _normaliser = sum(_weights).detach().to('cpu')
+
             for i in range(len(self.phi_list)):
                 phi_r = self.phi_list[i].to(x_in)
-                weight = self.weights_list[i].to(x_in)
 
-                phi_out = phi_r(x_in).detach().to('cpu')
-                weight_out = weight(lat_lon_stack).detach().to('cpu')
-
-                weights_dict[f'phi{i}_weight'] = weight_out
-                results_dict[f'phi{i}_out'] =  phi_out
+                weights_dict[f'phi{i}_weight'] = _weights[i] / _normaliser
+                results_dict[f'phi{i}_out'] =  phi_r(x_in).detach().to('cpu')
 
         return results_dict, weights_dict
 
@@ -588,12 +597,17 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
         x_out = torch.zeros_like(x_in).to(x_in)
         lat_lon_stack = torch.stack((latitude, longitude), dim=1)
 
+        _weights = []
+        for i in range(len(self.phi_list)):
+            weight = self.weights_list[i].to(x_in)
+            _weights.append(weight(lat_lon_stack))
+        _normaliser = sum(_weights)
+
         for i in range(len(self.phi_list)):
             phi_r = self.phi_list[i].to(x_in)
-            weight = self.weights_list[i].to(x_in)
-
             phi_out = phi_r(x_in)
-            weight_out = weight(lat_lon_stack)
+
+            weight_out = _weights[i] / _normaliser
 
             x_out = torch.add(x_out, torch.mul(weight_out, phi_out))
 
