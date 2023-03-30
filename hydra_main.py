@@ -108,7 +108,9 @@ class FourDVarNetHydraRunner:
 
         return mod
 
-    def _turn_OI_to_MP(self, mod, ckpt_path):
+    def _inject_OI_to_MP(self, mod, ckpt_path):
+        from dashtable import data2rst
+
         _mod = self.lit_cls.load_from_checkpoint(
             ckpt_path,
             hparam=self.cfg,
@@ -122,71 +124,123 @@ class FourDVarNetHydraRunner:
             var_Val=self.var_Val,
         )
 
-        print('\n---- IN  _turn_OI_to_MP ----\n')
+        print('\n---- IN _inject_OI_to_MP ----\n')
 
         print('>>> ckpt_path:', ckpt_path, '\n')
 
-        print('>>> mod (id, type):            ', id(mod), type(mod))
-        print('>>> mod.model (id, type):', id(mod.model), type(mod.model))
-        print(
-              '>>> mod.model.phi_r (id, type):',
-            id(mod.model.phi_r), type(mod.model.phi_r)
-        )
-        print('>>> _mod (id, type):           ', id(_mod), type(_mod))
-        print('>>> _mod.model (id, type):', id(_mod.model), type(_mod.model))
-        print(
-              '>>> _mod.model.phi_r (id, type):',
-            id(_mod.model.phi_r), type(_mod.model.phi_r), '\n'
-        )
+        _headers = ['', 'mod (id)', 'mod (type)', '_mod (id)', '_mod (type)']
 
-        print('>>> TRANSFERING MODEL FROM _mod TO mod\n')
-        mod.model.phi_r = _mod.model.phi_r
+        print('>>> 0. General')
+        print(data2rst(
+            [
+                _headers,
+                ['.', id(mod), type(mod), id(_mod), type(_mod)],
+                [
+                    '.model',
+                    id(mod.model), type(mod.model),
+                    id(_mod.model), type(_mod.model)
+                ],
+                [
+                    '.model.phi_r',
+                    id(mod.model.phi_r), type(mod.model.phi_r),
+                    id(_mod.model.phi_r), type(_mod.model.phi_r)
+                ],
+            ],
+            use_headers=True,
+        ))
+
+        print('>>> 1. Injecting _mod into mod')
+        print(data2rst(
+            [
+                _headers,
+                [
+                    '.model.model_H',
+                    id(mod.model.model_H), type(mod.model.model_H),
+                    id(_mod.model.model_H), type(_mod.model.model_H)
+                ],
+                [
+                    '.model.model_Grad',
+                    id(mod.model.model_Grad), type(mod.model.model_Grad),
+                    id(_mod.model.model_Grad), type(_mod.model.model_Grad)
+                ],
+                [
+                    '.model.model_VarCost',
+                    id(mod.model.model_VarCost), type(mod.model.model_VarCost),
+                    id(_mod.model.model_VarCost), type(_mod.model.model_VarCost)
+                ],
+            ],
+            use_headers=True,
+        ))
         mod.model.model_H = _mod.model.model_H
         mod.model.model_Grad = _mod.model.model_Grad
         mod.model.model_VarCost = _mod.model.model_VarCost
+        print('>>> after transfer:')
+        print(data2rst(
+            [
+                _headers,
+                [
+                    '.model.model_H',
+                    id(mod.model.model_H), type(mod.model.model_H),
+                    id(_mod.model.model_H), type(_mod.model.model_H)
+                ],
+                [
+                    '.model.model_Grad',
+                    id(mod.model.model_Grad), type(mod.model.model_Grad),
+                    id(_mod.model.model_Grad), type(_mod.model.model_Grad)
+                ],
+                [
+                    '.model.model_VarCost',
+                    id(mod.model.model_VarCost), type(mod.model.model_VarCost),
+                    id(_mod.model.model_VarCost), type(_mod.model.model_VarCost)
+                ],
+            ],
+            use_headers=True,
+        ))
 
-        print('>>> mod.model (id, type):', id(mod.model), type(mod.model))
-        print(
-              '>>> mod.model.phi_r (id, type):',
-            id(mod.model.phi_r), type(mod.model.phi_r)
-        )
-        print('>>> _mod.model (id, type):', id(_mod.model), type(_mod.model))
-        print(
-              '>>> _mod.model.phi_r (id, type):',
-            id(_mod.model.phi_r), type(_mod.model.phi_r), '\n'
-        )
+        print(">>> 2. Injecting _mod's phi into mod's phi_list[0]")
+        _phis = []
+        for i in range(len(mod.model.phi_r.phi_list)):
+            cphi = mod.model.phi_r.phi_list[i]
+            rowlegend = f'.model.phi_r.phi_list[{i}]'
 
-        print('>>> INSTANTIATE mp = Lat_Lon_Multi_Prior(..)')
-        from models import Lat_Lon_Multi_Prior
-        mp = Lat_Lon_Multi_Prior(
-            self.cfg.shape_state,
-            self.cfg.DimAE,
-            self.cfg.dW,
-            self.cfg.dW2,
-            self.cfg.sS,
-            self.cfg.nbBlocks,
-            self.cfg.dropout_phi_r,
-            nb_phi=self.cfg.nb_phi,
-        )
-        print('>>> mp (id, type):             ', id(mp), type(mp))
-        print('>>> mp.phi_list (id, type):')
-        for _p in mp.phi_list:
-            print('...                            ', id(_p), type(_p))
-        print()
+            if i == 0:
+                _phis.append([
+                    rowlegend,
+                    id(cphi), type(cphi),
+                    id(_mod.model.phi_r), type(_mod.model.phi_r)
+                ])
+            else:
+                _phis.append([
+                    rowlegend, id(cphi), type(cphi), '', ''
+                ])
 
-        print('>>> PERFORMING mp.phi_list[0] <- mod.model.phi_r')
-        mp.phi_list[0] = mod.model.phi_r
-        print('>>> mp.phi_list (id, type):')
-        for _p in mp.phi_list:
-            print('...                            ', id(_p), type(_p))
-        print()
+        print(data2rst(
+            [_headers, *_phis],
+            use_headers=True,
+        ))
 
-        print('>>> PERFORMING mod.model.phi_r <- mp')
-        mod.model.phi_r = mp
-        print(
-            '>>> mod.model.phi_r (id, type):',
-            id(mod.model.phi_r), type(mod.model.phi_r), '\n'
-        )
+        mod.model.phi_r.phi_list[0] = _mod.model.phi_r
+        print('>>> after transfer:')
+        _phis = []
+        for i in range(len(mod.model.phi_r.phi_list)):
+            cphi = mod.model.phi_r.phi_list[i]
+            rowlegend = f'.model.phi_r.phi_list[{i}]'
+
+            if i == 0:
+                _phis.append([
+                    rowlegend,
+                    id(cphi), type(cphi),
+                    id(_mod.model.phi_r), type(_mod.model.phi_r)
+                ])
+            else:
+                _phis.append([
+                    rowlegend, id(cphi), type(cphi), '', ''
+                ])
+
+        print(data2rst(
+            [_headers, *_phis],
+            use_headers=True,
+        ))
 
         print(mod)
 
@@ -201,8 +255,12 @@ class FourDVarNetHydraRunner:
         :param trainer_kwargs: (Optional) Trainer arguments
         :return:
         """
-
-        mod = self._get_model(ckpt_path=ckpt_path)
+        # NOTE It is supposed the model instanciated here will be a
+        # Multi_Prior_Lat_Lon, so we do not load the checkpoint in
+        # `_get_model`, instead we will inject the loaded sub-models
+        # into the blank Lat_Lon_Multi_Prior.
+        mod = self._get_model()
+        mod = self._inject_OI_to_MP(mod, ckpt_path)
 
         checkpoint_callback = ModelCheckpoint(monitor='val_loss',
                                               filename=self.filename_chkpt,
