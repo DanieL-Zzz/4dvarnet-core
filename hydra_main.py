@@ -236,6 +236,7 @@ class FourDVarNetHydraRunner:
             return
 
         mod = _mod or self._get_model(ckpt_path=ckpt_path)
+        mod = self._turn_OI_to_MP(mod, ckpt_path)
 
         trainer_kwargs_final = {**dict(num_nodes=1, gpus=1, accelerator=None), **trainer_kwargs}
         trainer = pl.Trainer(**trainer_kwargs_final)
