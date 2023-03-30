@@ -483,7 +483,7 @@ class Weight_Network(torch.nn.Module):
             torch.nn.ReLU(True),
             torch.nn.BatchNorm2d(in_channels * 8),
             #changes channels to number of days * number of priors
-            torch.nn.Conv2d(in_channels * 8, shape_data[0] * nb_phi, (2 * dw + 1, 2 * dw + 1), padding=dw),
+            torch.nn.Conv2d(in_channels * 8, shape_data[0], (2 * dw + 1, 2 * dw + 1), padding=dw),
             torch.nn.Sigmoid()
         )
 
@@ -499,103 +499,102 @@ class Weight_Network(torch.nn.Module):
 
 #Multi prior that uses the state to calculate the weights
 class Multi_Prior(torch.nn.Module):
-    def __init__(self, shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi=2, stochastic=False):
+    def __init__(
+        self, shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr,
+        nb_phi=2, stochastic=False, in_channel=None,
+    ):
         super().__init__()
-        self.phi_list = self.get_phi_list(shape_data[0], DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi, stochastic)
-        self.weights = Weight_Network(shape_data, nb_phi, dw, shape_data[0])
+
+        if not in_channel:
+            in_channel = shape_data[0]
+
+        self.phi_list = []
+        self.weights_list = []
+
+        for _ in range(nb_phi):
+            self.phi_list.append(
+                Phi_r_OI(shape_data[0], DimAE, dw, dw2, ss, nb_blocks, rateDr, stochastic)
+            )
+            self.weights_list.append(
+                Weight_Network(shape_data, nb_phi, dw, in_channel)
+            )
+
         self.nb_phi = nb_phi
         self.shape_data = shape_data
-
-    def get_phi_list(self, shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi, stochastic=False):
-        phi_list = []
-        for i in range(nb_phi):
-            phi_list.append(Phi_r_OI(shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, stochastic))
-        return phi_list
 
     #gives a list of outputs for the phis for validation step
     def get_intermediate_results(self, x_in):
         with torch.no_grad():
             x_in = x_in.to(x_in)
-            self.weights = self.weights.to(x_in)
-            #Each element of these dicts correspond to a phi
+
             results_dict = {}
             weights_dict = {}
-            x_weights = self.weights(x_in).detach().to('cpu')
-            for idx, phi_r in enumerate(self.phi_list):
-                phi_r = phi_r.to(x_in)
-                start = idx * self.shape_data[0]
-                stop = (idx + 1) * self.shape_data[0]
+
+            for i in range(len(self.phi_list)):
+                phi_r = self.phi_list[i].to(x_in)
+                weight = self.weights_list[i].to(x_in)
 
                 phi_out = phi_r(x_in).detach().to('cpu')
-                weight = x_weights[:,start:stop, :,:]
+                weight_out = weight(x_in).detach().to('cpu')
 
-                weights_dict[f'phi{idx}_weight'] = weight
-                results_dict[f'phi{idx}_out'] =  phi_out
+                weights_dict[f'phi{i}_weight'] = weight_out
+                results_dict[f'phi{i}_out'] =  phi_out
+
         return results_dict, weights_dict
 
     def forward(self, x_in):
         print('###X_IN SHAPE', x_in.shape)
         x_out = torch.zeros_like(x_in).to(x_in)
-        self.weights= self.weights.to(x_in)
-        x_weights = self.weights(x_in)
-        for idx, phi_r in enumerate(self.phi_list):
-            #Get the indices corresponding to the weights for a given phi
-            phi_r = phi_r.to(x_in)
-            start = idx * self.shape_data[0]
-            stop = (idx + 1) * self.shape_data[0]
+
+        for i in range(len(self.phi_list)):
+            phi_r = self.phi_list[i].to(x_in)
+            weight = self.weights_list[i].to(x_in)
 
             phi_out = phi_r(x_in)
-            weight = x_weights[:,start:stop, :,:]
+            weight_out = weight(x_in)
 
-            #Multiply the phi by its weights, add to final sum
-            x_out = torch.add(x_out, torch.mul(weight, phi_out))
+            x_out = torch.add(x_out, torch.mul(weight_out, phi_out))
+
         return x_out
 
 
 class Lat_Lon_Multi_Prior(Multi_Prior):
     def __init__(self, shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi=2, stochastic=False):
-        print('####NB PHI', nb_phi)
-        super().__init__(shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi, stochastic=False)
-        self.weights = Weight_Network(shape_data, nb_phi, dw, 2)
-        self.previous_weight = None
+        # `in_channel=2` because 'lat' and 'lon' (two)
+        super().__init__(shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi, stochastic=False, in_channel=2)
 
     #gives a list of outputs for the phis for validation step
     def get_intermediate_results(self, x_in, latitude, longitude):
         with torch.no_grad():
             x_in = x_in.to(x_in)
-            self.weights = self.weights.to(x_in)
-            #Each element of these dicts correspond to a phi
+            lat_lon_stack = torch.stack((latitude, longitude), dim=1)
+
             results_dict = {}
             weights_dict = {}
-            lat_lon_stack = torch.stack((latitude, longitude), dim=1)
-            x_weights = self.weights(lat_lon_stack).detach().to('cpu')
 
-            for idx, phi_r in enumerate(self.phi_list):
-                phi_r = phi_r.to(x_in)
-                start = idx * self.shape_data[0]
-                stop = (idx + 1) * self.shape_data[0]
+            for i in range(len(self.phi_list)):
+                phi_r = self.phi_list[i].to(x_in)
+                weight = self.weights_list[i].to(x_in)
 
                 phi_out = phi_r(x_in).detach().to('cpu')
-                weight = x_weights[:,start:stop, :,:]
+                weight_out = weight(lat_lon_stack).detach().to('cpu')
 
-                weights_dict[f'phi{idx}_weight'] = weight
-                results_dict[f'phi{idx}_out'] =  phi_out
+                weights_dict[f'phi{i}_weight'] = weight_out
+                results_dict[f'phi{i}_out'] =  phi_out
+
         return results_dict, weights_dict
 
     def forward(self, x_in, latitude, longitude):
         x_out = torch.zeros_like(x_in).to(x_in)
-        self.weights= self.weights.to(x_in)
         lat_lon_stack = torch.stack((latitude, longitude), dim=1)
-        x_weights = self.weights(lat_lon_stack)
-        for idx, phi_r in enumerate(self.phi_list):
-            #Get the indices corresponding to the weights for a given phi
-            phi_r = phi_r.to(x_in)
-            start = idx * self.shape_data[0]
-            stop = (idx + 1) * self.shape_data[0]
+
+        for i in range(len(self.phi_list)):
+            phi_r = self.phi_list[i].to(x_in)
+            weight = self.weights_list[i].to(x_in)
 
             phi_out = phi_r(x_in)
-            weight = x_weights[:,start:stop, :,:]
+            weight_out = weight(lat_lon_stack)
 
-            #Multiply the phi by its weights, add to final sum
-            x_out = torch.add(x_out, torch.mul(weight, phi_out))
+            x_out = torch.add(x_out, torch.mul(weight_out, phi_out))
+
         return x_out
