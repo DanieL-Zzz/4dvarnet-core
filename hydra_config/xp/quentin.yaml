@@ -3,10 +3,10 @@
 entrypoint:
   # _target_: hydra_main.FourDVarNetHydraRunner.train
   # ckpt_path: null
-  # max_epochs: 350
+  max_epochs: 200
   progress_bar_refresh_rate: 5
   limit_train_batches: 1.0
-xp_name: qxp22_5nad_aug3_ds1
+xp_name: QOIMP
 params:
   nb_phi: 2
   files_cfg:
@@ -46,7 +46,7 @@ params:
   - 0.001
   n_fourdvar_iter: 3
   weight_decay: ???
-  model: 4dvarnet_OI
+  model: lat_lon_multi_prior
   sst: false
   val_diag_freq: 5
   n_grad: 5
@@ -137,7 +137,7 @@ datamodule:
   resolution: 1/20
   resize_factor: 1
   dl_kwargs:
-    batch_size: 4
+    batch_size: 2
     num_workers: 2
   dataset_class:
     _target_: dataloading.FourDVarNetDatasetLatLon
