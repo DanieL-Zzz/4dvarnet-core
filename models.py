@@ -489,6 +489,14 @@ class Weight_Network(torch.nn.Module):
 
         self.n_phi = nb_phi
 
+    def change_initial_output(self, output):
+        """
+        Take care of the sigmoid!
+        """
+        with torch.no_grad():
+            self.avg_pool_conv[-2].bias[:] = output
+            self.avg_pool_conv[-2].weight[:, :, :, :] = 0.
+
     def forward(self, x_in):
         x_out  = self.avg_pool_conv(x_in)
         #TODO need to make sure that this works for non-square windows
@@ -569,6 +577,19 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
     def __init__(self, shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi=2, stochastic=False):
         # `in_channel=2` because 'lat' and 'lon' (two)
         super().__init__(shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr, nb_phi, stochastic=False, in_channel=2)
+
+        ############
+        # Ici on fixe les poids initiaux (en prenant en compte la fonction
+        # sigmoid en sortie du réseau des poids).
+
+        for i in range(len(self.weights_list)):
+            if i == 0:
+                # sigmoid(10) = 1.
+                self.weights_list[i].change_initial_output(10.)
+            else:
+                # sigmoid(-10) = 0.
+                self.weights_list[i].change_initial_output(-10.)
+        ############
 
     #gives a list of outputs for the phis for validation step
     def get_intermediate_results(self, x_in, latitude, longitude):
