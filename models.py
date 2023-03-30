@@ -585,10 +585,13 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
         for i in range(len(self.weights_list)):
             if i == 0:
                 # sigmoid(10) = 1.
-                self.weights_list[i].change_initial_output(10.)
+                self.weights_list[i].change_initial_output(2.199)
             else:
                 # sigmoid(-10) = 0.
-                self.weights_list[i].change_initial_output(-10.)
+                self.weights_list[i].change_initial_output(-2.199)
+
+        # Ici on définit le bruit
+        self.weight_noise = None
         ############
 
     #gives a list of outputs for the phis for validation step
@@ -603,7 +606,12 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
             _weights = []
             for i in range(len(self.phi_list)):
                 weight = self.weights_list[i].to(x_in)
-                _weights.append(weight(lat_lon_stack).detach().to('cpu'))
+                w = weight(lat_lon_stack)
+                if i == 0:
+                    w += self.weight_noise
+                else:
+                    w -= self.weight_noise
+                _weights.append(w.detach().to('cpu'))
             _normaliser = sum(_weights).detach().to('cpu')
 
             for i in range(len(self.phi_list)):
@@ -615,13 +623,21 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
         return results_dict, weights_dict
 
     def forward(self, x_in, latitude, longitude):
+        if self.weight_noise is None:
+            self.weight_noise = torch.normal(mean=0., std=.1, size=x_in.shape).detach().to('cpu')
+
         x_out = torch.zeros_like(x_in).to(x_in)
         lat_lon_stack = torch.stack((latitude, longitude), dim=1)
 
         _weights = []
         for i in range(len(self.phi_list)):
             weight = self.weights_list[i].to(x_in)
-            _weights.append(weight(lat_lon_stack))
+            w = weight(lat_lon_stack)
+            if i == 0:
+                w += self.weight_noise
+            else:
+                w -= self.weight_noise
+            _weights.append(w)
         _normaliser = sum(_weights)
 
         for i in range(len(self.phi_list)):
