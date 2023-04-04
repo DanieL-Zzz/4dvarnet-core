@@ -203,39 +203,31 @@ class FourDVarNetHydraRunner:
             cphi = mod.model.phi_r.phi_list[i]
             rowlegend = f'.model.phi_r.phi_list[{i}]'
 
-            if i == 0:
-                _phis.append([
-                    rowlegend,
-                    id(cphi), type(cphi),
-                    id(_mod.model.phi_r), type(_mod.model.phi_r)
-                ])
-            else:
-                _phis.append([
-                    rowlegend, id(cphi), type(cphi), '', ''
-                ])
+            _phis.append([
+                rowlegend,
+                id(cphi), type(cphi),
+                id(_mod.model.phi_r), type(_mod.model.phi_r)
+            ])
+
+            # transfer
+            mod.model.phi_r.phi_list[i] = _mod.model.phi_r
 
         print(data2rst(
             [_headers, *_phis],
             use_headers=True,
         ))
 
-        mod.model.phi_r.phi_list[0] = _mod.model.phi_r
         print('>>> after transfer:')
         _phis = []
         for i in range(len(mod.model.phi_r.phi_list)):
             cphi = mod.model.phi_r.phi_list[i]
             rowlegend = f'.model.phi_r.phi_list[{i}]'
 
-            if i == 0:
-                _phis.append([
-                    rowlegend,
-                    id(cphi), type(cphi),
-                    id(_mod.model.phi_r), type(_mod.model.phi_r)
-                ])
-            else:
-                _phis.append([
-                    rowlegend, id(cphi), type(cphi), '', ''
-                ])
+            _phis.append([
+                rowlegend,
+                id(cphi), type(cphi),
+                id(_mod.model.phi_r), type(_mod.model.phi_r)
+            ])
 
         print(data2rst(
             [_headers, *_phis],
