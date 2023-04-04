@@ -489,14 +489,6 @@ class Weight_Network(torch.nn.Module):
 
         self.n_phi = nb_phi
 
-    def change_initial_output(self, output):
-        """
-        Take care of the sigmoid!
-        """
-        with torch.no_grad():
-            self.avg_pool_conv[-2].bias[:] = output
-            self.avg_pool_conv[-2].weight[:, :, :, :] = 0.
-
     def forward(self, x_in):
         x_out  = self.avg_pool_conv(x_in)
         #TODO need to make sure that this works for non-square windows
@@ -580,15 +572,23 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
 
         ############
         # Ici on fixe les poids initiaux (en prenant en compte la fonction
-        # sigmoid en sortie du réseau des poids).
+        # sigmoid en sortie du réseau des poids). Ici, nb_phis=2
 
-        for i in range(len(self.weights_list)):
-            if i == 0:
-                # sigmoid(10) = 1.
-                self.weights_list[i].change_initial_output(2.199)
-            else:
-                # sigmoid(-10) = 0.
-                self.weights_list[i].change_initial_output(-2.199)
+        # for i in range(len(self.weights_list)):
+        #     if i == 0:
+        #         torch.nn.init.normal(
+        #             self.weights_list[i].avg_pool_conv[-2].bias, 2.2, 0.,
+        #         )
+        #         torch.nn.init.normal_(
+        #             self.weights_list[i].avg_pool_conv[-2].weight, 0., 0.,
+        #         )
+        #     else:
+        #         torch.nn.init.normal(
+        #             self.weights_list[i].avg_pool_conv[-2].bias, -2.2, 0.,
+        #         )
+        #         torch.nn.init.normal(
+        #             self.weights_list[i].avg_pool_conv[-2].weight, 0., 0.,
+        #         )
 
         # Ici on définit le bruit
         self.weight_noise = None
@@ -606,45 +606,43 @@ class Lat_Lon_Multi_Prior(Multi_Prior):
             _weights = []
             for i in range(len(self.phi_list)):
                 weight = self.weights_list[i].to(x_in)
-                w = weight(lat_lon_stack)
-                if i == 0:
-                    w += self.weight_noise
-                else:
-                    w -= self.weight_noise
-                _weights.append(w.detach().to('cpu'))
-            _normaliser = sum(_weights).detach().to('cpu')
+                _weights.append(weight(lat_lon_stack).detach().to('cpu'))
+            #_normaliser = sum(_weights).detach().to('cpu')
+
+            if self.weight_noise is None:
+                # self.weight_noise = True
+
+                for i,_s in enumerate(_weights):
+                    print('\n>>> weight', i)
+                    print('mean:', _s.mean())
+                    print('std:', _s.std())
+                    print('min:', _s.min())
+                    print('max:', _s.max())
+                input()
 
             for i in range(len(self.phi_list)):
                 phi_r = self.phi_list[i].to(x_in)
 
-                weights_dict[f'phi{i}_weight'] = _weights[i] / _normaliser
+                weights_dict[f'phi{i}_weight'] = _weights[i]  #/ _normaliser
                 results_dict[f'phi{i}_out'] =  phi_r(x_in).detach().to('cpu')
 
         return results_dict, weights_dict
 
     def forward(self, x_in, latitude, longitude):
-        if self.weight_noise is None:
-            self.weight_noise = torch.normal(mean=0., std=.1, size=x_in.shape).detach().to('cpu')
-
         x_out = torch.zeros_like(x_in).to(x_in)
         lat_lon_stack = torch.stack((latitude, longitude), dim=1)
 
         _weights = []
         for i in range(len(self.phi_list)):
             weight = self.weights_list[i].to(x_in)
-            w = weight(lat_lon_stack)
-            if i == 0:
-                w += self.weight_noise
-            else:
-                w -= self.weight_noise
-            _weights.append(w)
-        _normaliser = sum(_weights)
+            _weights.append(weight(lat_lon_stack))
+        # _normaliser = sum(_weights)
 
         for i in range(len(self.phi_list)):
             phi_r = self.phi_list[i].to(x_in)
             phi_out = phi_r(x_in)
 
-            weight_out = _weights[i] / _normaliser
+            weight_out = _weights[i]  #/ _normaliser
 
             x_out = torch.add(x_out, torch.mul(weight_out, phi_out))
 
