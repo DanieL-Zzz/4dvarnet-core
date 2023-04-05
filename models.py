@@ -168,6 +168,7 @@ class Phi_r_OI(torch.nn.Module):
         else:
             x = self.encoder(x)
         x = self.decoder(x)
+        print('>>>', x.mean(), x.std(), x.min(), x.max())
         return x
 
 class Model_H(torch.nn.Module):
