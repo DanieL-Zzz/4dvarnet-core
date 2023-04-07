@@ -482,16 +482,16 @@ class Weight_Network(torch.nn.Module):
         self.shape_data = shape_data
 
         self.avg_pool_conv = torch.nn.Sequential(
-            DoubleConv(in_channels, in_channels*2),
+            DoubleConv(in_channels, in_channels*8),
             torch.nn.AvgPool2d(2),
-            torch.nn.BatchNorm2d(in_channels * 2),
-            DoubleConv(in_channels * 2, in_channels * 4), #From DoubleConv from the UNet section
-            torch.nn.AvgPool2d(2),
-            torch.nn.BatchNorm2d(in_channels * 4),
-            torch.nn.Conv2d(in_channels * 4, in_channels* 8, (2 * dw + 1, 2 * dw + 1), padding=dw),
-            torch.nn.ReLU(True),
             torch.nn.BatchNorm2d(in_channels * 8),
-            #changes channels to number of days * number of priors
+            # DoubleConv(in_channels * 2, in_channels * 4), #From DoubleConv from the UNet section
+            # torch.nn.AvgPool2d(2),
+            # torch.nn.BatchNorm2d(in_channels * 4),
+            # torch.nn.Conv2d(in_channels * 4, in_channels* 8, (2 * dw + 1, 2 * dw + 1), padding=dw),
+            # torch.nn.ReLU(True),
+            # torch.nn.BatchNorm2d(in_channels * 8),
+            # changes channels to number of days * number of priors
             torch.nn.Conv2d(in_channels * 8, shape_data[0], (2 * dw + 1, 2 * dw + 1), padding=dw),
             torch.nn.Sigmoid()
         )
