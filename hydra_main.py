@@ -109,7 +109,22 @@ class FourDVarNetHydraRunner:
         return mod
 
     def _inject_OI_to_MP(self, mod, ckpt_path):
+        import hashlib
+        import json
+
         from dashtable import data2rst
+
+        def _hash(_model):
+            d = _model.state_dict()
+            for key, value in d.items():
+                if isinstance(value, torch.Tensor):
+                    d[key] = value.cpu().numpy().tolist()
+            return hashlib.sha256(
+                json.dumps(d, sort_keys=True).encode('utf8')
+            ).hexdigest()[:10]
+
+        def _hit(_model):  # hash, id, type
+            return _hash(_model), str(id(_model))[-10:], type(_model)
 
         _mod = self.lit_cls.load_from_checkpoint(
             ckpt_path,
@@ -126,24 +141,31 @@ class FourDVarNetHydraRunner:
 
         print('\n---- IN _inject_OI_to_MP ----\n')
 
-        print('>>> ckpt_path:', ckpt_path, '\n')
+        print(
+            f'>>> injecting {ckpt_path} ({_mod.model_name}) into the current'
+            + f' model ({mod.model_name})\n'
+        )
 
-        _headers = ['', 'mod (id)', 'mod (type)', '_mod (id)', '_mod (type)']
+        _headers = [
+            '',
+            'mod (hash)', 'mod (id)', 'mod (type)',
+            '_mod (hash)', '_mod (id)', '_mod (type)'
+        ]
 
         print('>>> 0. General')
         print(data2rst(
             [
                 _headers,
-                ['.', id(mod), type(mod), id(_mod), type(_mod)],
+                ['.', *_hit(mod), *_hit(_mod)],
                 [
                     '.model',
-                    id(mod.model), type(mod.model),
-                    id(_mod.model), type(_mod.model)
+                    *_hit(mod.model),
+                    *_hit(_mod.model)
                 ],
                 [
                     '.model.phi_r',
-                    id(mod.model.phi_r), type(mod.model.phi_r),
-                    id(_mod.model.phi_r), type(_mod.model.phi_r)
+                    *_hit(mod.model.phi_r),
+                    *_hit(_mod.model.phi_r)
                 ],
             ],
             use_headers=True,
@@ -155,43 +177,43 @@ class FourDVarNetHydraRunner:
                 _headers,
                 [
                     '.model.model_H',
-                    id(mod.model.model_H), type(mod.model.model_H),
-                    id(_mod.model.model_H), type(_mod.model.model_H)
+                    *_hit(mod.model.model_H),
+                    *_hit(_mod.model.model_H)
                 ],
                 [
                     '.model.model_Grad',
-                    id(mod.model.model_Grad), type(mod.model.model_Grad),
-                    id(_mod.model.model_Grad), type(_mod.model.model_Grad)
+                    *_hit(mod.model.model_Grad),
+                    *_hit(_mod.model.model_Grad)
                 ],
                 [
                     '.model.model_VarCost',
-                    id(mod.model.model_VarCost), type(mod.model.model_VarCost),
-                    id(_mod.model.model_VarCost), type(_mod.model.model_VarCost)
+                    *_hit(mod.model.model_VarCost),
+                    *_hit(_mod.model.model_VarCost)
                 ],
             ],
             use_headers=True,
         ))
-        mod.model.model_H = _mod.model.model_H
-        mod.model.model_Grad = _mod.model.model_Grad
-        mod.model.model_VarCost = _mod.model.model_VarCost
+        mod.model.model_H.load_state_dict(_mod.model.model_H.state_dict())
+        mod.model.model_Grad.load_state_dict(_mod.model.model_Grad.state_dict())
+        mod.model.model_VarCost.load_state_dict(_mod.model.model_VarCost.state_dict())
         print('>>> after transfer:')
         print(data2rst(
             [
                 _headers,
                 [
                     '.model.model_H',
-                    id(mod.model.model_H), type(mod.model.model_H),
-                    id(_mod.model.model_H), type(_mod.model.model_H)
+                    *_hit(mod.model.model_H),
+                    *_hit(_mod.model.model_H)
                 ],
                 [
                     '.model.model_Grad',
-                    id(mod.model.model_Grad), type(mod.model.model_Grad),
-                    id(_mod.model.model_Grad), type(_mod.model.model_Grad)
+                    *_hit(mod.model.model_Grad),
+                    *_hit(_mod.model.model_Grad)
                 ],
                 [
                     '.model.model_VarCost',
-                    id(mod.model.model_VarCost), type(mod.model.model_VarCost),
-                    id(_mod.model.model_VarCost), type(_mod.model.model_VarCost)
+                    *_hit(mod.model.model_VarCost),
+                    *_hit(_mod.model.model_VarCost)
                 ],
             ],
             use_headers=True,
@@ -203,16 +225,17 @@ class FourDVarNetHydraRunner:
             cphi = mod.model.phi_r.phi_list[i]
             rowlegend = f'.model.phi_r.phi_list[{i}]'
 
-            if i == 0:
-                _phis.append([
-                    rowlegend,
-                    id(cphi), type(cphi),
-                    id(_mod.model.phi_r), type(_mod.model.phi_r)
-                ])
-            else:
-                _phis.append([
-                    rowlegend, id(cphi), type(cphi), '', ''
-                ])
+            _phis.append([
+                rowlegend,
+                *_hit(cphi),
+                *_hit(_mod.model.phi_r)
+            ])
+
+            # transfer
+            mod.model.phi_r.phi_list[i].load_state_dict(_mod.model.phi_r.state_dict())
+
+        # Noise last prior's last layer (N(0, 10⁻²))
+        # mod.model.phi_r.phi_list[-1].noise_last_layer(0., .01)
 
         print(data2rst(
             [_headers, *_phis],
@@ -226,16 +249,11 @@ class FourDVarNetHydraRunner:
             cphi = mod.model.phi_r.phi_list[i]
             rowlegend = f'.model.phi_r.phi_list[{i}]'
 
-            if i == 0:
-                _phis.append([
-                    rowlegend,
-                    id(cphi), type(cphi),
-                    id(_mod.model.phi_r), type(_mod.model.phi_r)
-                ])
-            else:
-                _phis.append([
-                    rowlegend, id(cphi), type(cphi), '', ''
-                ])
+            _phis.append([
+                rowlegend,
+                *_hit(cphi),
+                *_hit(_mod.model.phi_r)
+            ])
 
         print(data2rst(
             [_headers, *_phis],
