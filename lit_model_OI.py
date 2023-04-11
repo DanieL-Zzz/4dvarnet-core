@@ -160,8 +160,8 @@ class LitModelOI(LitModelAugstate):
         if not LitModelOI.is_inited:
             print('>>> LitModelOI: First init')
             LitModelOI.is_inited = True
-            self.hparams.model = 'lat_lon_multi_prior'
-            self.model_name = 'lat_lon_multi_prior'
+            self.hparams.model = 'multi_prior'
+            self.model_name = 'multi_prior'
             self.model = self.create_model()
         else:
             print('>>> LitModelOI: Not the first init')
