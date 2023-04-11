@@ -264,8 +264,6 @@ class FourDVarNetHydraRunner:
 
         print('>>> LEAVING _turn_OI_to_MP')
 
-        return mod
-
     def train(self, ckpt_path=None, **trainer_kwargs):
         """
         Train a model
@@ -278,7 +276,7 @@ class FourDVarNetHydraRunner:
         # `_get_model`, instead we will inject the loaded sub-models
         # into the blank Lat_Lon_Multi_Prior.
         mod = self._get_model()
-        mod = self._inject_OI_to_MP(mod, ckpt_path)
+        self._inject_OI_to_MP(mod, ckpt_path)
 
         checkpoint_callback = ModelCheckpoint(monitor='val_loss',
                                               filename=self.filename_chkpt,

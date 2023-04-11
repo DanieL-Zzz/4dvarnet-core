@@ -152,20 +152,6 @@ class LitModelOI(LitModelAugstate):
     #     parser = parent_parser.add_argument_group("LitModel_OI")
     #     parser.add_argument("--FP_iterations", type=int, default=self.hparams.n_grad * self.hparams.n_fourdvar_iter)
 
-    is_inited = False
-
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not LitModelOI.is_inited:
-            print('>>> LitModelOI: First init')
-            LitModelOI.is_inited = True
-            self.hparams.model = 'lat_lon_multi_prior'
-            self.model_name = 'lat_lon_multi_prior'
-            self.model = self.create_model()
-        else:
-            print('>>> LitModelOI: Not the first init')
-
     def configure_optimizers(self):
         opt = torch.optim.Adam
         if hasattr(self.hparams, 'opt'):
