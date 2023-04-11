@@ -304,15 +304,11 @@ class FourDVarNetHydraRunner:
         :param dataloader: Dataloader on which to run the test Checkpoint from which to resume
         :param trainer_kwargs: (Optional)
         """
-
-        if _trainer is not None:
-            _trainer.test(mod, dataloaders=self.dataloaders[dataloader])
-            return
-
+        trainer = _trainer or pl.Trainer(
+            num_nodes=1, gpus=1, accelerator=None, **trainer_kwargs,
+        )
         mod = _mod or self._get_model(ckpt_path=ckpt_path)
 
-        trainer_kwargs_final = {**dict(num_nodes=1, gpus=1, accelerator=None), **trainer_kwargs}
-        trainer = pl.Trainer(**trainer_kwargs_final)
         trainer.test(mod, dataloaders=self.dataloaders[dataloader])
         return mod
 
