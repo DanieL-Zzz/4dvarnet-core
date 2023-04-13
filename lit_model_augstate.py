@@ -395,7 +395,7 @@ class LitModelAugstate(pl.LightningModule):
         )
 
     def sla_diag(self, t_idx=3, log_pref='test'):
-        path_save0 = self.logger.log_dir + '/maps.png'
+        path_save0 = self.logger.log_dir + f'/{log_pref}_maps.png'
         t_idx = 3
         fig_maps = plot_maps(
                   self.x_gt[t_idx],
@@ -403,7 +403,7 @@ class LitModelAugstate(pl.LightningModule):
                   self.x_oi[t_idx],
                   self.x_rec[t_idx],
                   self.test_lon, self.test_lat, path_save0)
-        path_save01 = self.logger.log_dir + '/maps_Grad.png'
+        path_save01 = self.logger.log_dir + f'/{log_pref}_maps_Grad.png'
         fig_maps_grad = plot_maps(
                   self.x_gt[t_idx],
                 self.obs_inp[t_idx],
@@ -417,7 +417,7 @@ class LitModelAugstate(pl.LightningModule):
 
         # animate maps
         if self.hparams.animate == True:
-            path_save0 = self.logger.log_dir + '/animation.mp4'
+            path_save0 = self.logger.log_dir + f'/{log_pref}_animation.mp4'
             animate_maps(self.x_gt, self.obs_inp, self.x_oi, self.x_rec, self.test_lon, self.test_lat, path_save0)
             # save NetCDF
         # PENDING: replace hardcoded 60
@@ -485,7 +485,7 @@ class LitModelAugstate(pl.LightningModule):
         print(self.test_xr_ds.dims)
         print(self.test_xr_ds.time)
         Path(self.logger.log_dir).mkdir(exist_ok=True)
-        path_save1 = self.logger.log_dir + f'/test.nc'
+        path_save1 = self.logger.log_dir + f'/{log_pref}.nc'
         self.test_xr_ds.to_netcdf(path_save1)
 
         self.x_gt = self.test_xr_ds.gt.data
