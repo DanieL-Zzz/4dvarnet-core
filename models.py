@@ -552,7 +552,6 @@ class Multi_Prior(torch.nn.Module):
         return results_dict, weights_dict
 
     def forward(self, x_in):
-        print('###X_IN SHAPE', x_in.shape)
         x_out = torch.zeros_like(x_in).to(x_in)
 
         for i in range(len(self.phi_list)):
