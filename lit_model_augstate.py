@@ -1,4 +1,4 @@
-import einops
+import tqdm
 import hydra
 import torch.distributed as dist
 import kornia
@@ -353,7 +353,7 @@ class LitModelAugstate(pl.LightningModule):
                 {v: (fin_ds.dims, np.zeros(list(fin_ds.dims.values()))) }
             )
 
-        for ds in dses:
+        for ds in tqdm.tqdm(dses):
             ds_nans = ds.assign(weight=xr.ones_like(ds.gt)).isnull().broadcast_like(fin_ds).fillna(0.)
             xr_weight = xr.DataArray(self.patch_weight.detach().cpu(), ds.coords, dims=ds.gt.dims)
             _ds = ds.pipe(lambda dds: dds * xr_weight).assign(weight=xr_weight).broadcast_like(fin_ds).fillna(0.).where(ds_nans==0, np.nan)

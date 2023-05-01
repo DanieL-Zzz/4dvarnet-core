@@ -4,7 +4,8 @@ entrypoint:
   max_epochs: 1
   progress_bar_refresh_rate: 5
   limit_train_batches: 1.0
-xp_name: QOI
+  qmodel_path: /sanssauvegarde/homes/d22zhu/Lab/archives/lx691_lt406_mu959.ckpt
+xp_name: QOIMP
 params:
   files_cfg:
     oi_path: ${file_paths.oi_4nadir}
@@ -41,9 +42,10 @@ params:
   - 0.001
   - 0.001
   - 0.001
-  n_fourdvar_iter: 3
+  n_fourdvar_iter: 1
   weight_decay: ???
-  model: 4dvarnet_OI
+  model: multipriors
+  n_priors: 2
   sst: false
   val_diag_freq: 1
   n_grad: 5

@@ -99,10 +99,9 @@ class LitModelOI(LitModelAugstate):
 
         return results
 
-    def sla_diag(self, t_idx=3, log_pref='test'):
+    def sla_diag(self, t_idx=2, log_pref='test'):
 
         path_save0 = self.logger.log_dir + f'/{log_pref}_maps.png'
-        t_idx = 3
         fig_maps = plot_maps_oi(
                   self.x_gt[t_idx],
                 self.obs_inp[t_idx],
@@ -119,11 +118,15 @@ class LitModelOI(LitModelAugstate):
         self.logger.experiment.add_figure(f'{log_pref} Maps', fig_maps, global_step=self.current_epoch)
         self.logger.experiment.add_figure(f'{log_pref} Maps Grad', fig_maps_grad, global_step=self.current_epoch)
 
-        psd_ds, lamb_x, lamb_t = metrics.psd_based_scores(self.test_xr_ds.pred, self.test_xr_ds.gt)
-        psd_fig = metrics.plot_psd_score(psd_ds)
-        self.test_figs['psd'] = psd_fig
-        self.logger.experiment.add_figure(f'{log_pref} PSD', psd_fig, global_step=self.current_epoch)
-        _, _, mu, sig = metrics.rmse_based_scores(self.test_xr_ds.pred, self.test_xr_ds.gt)
+        lamb_x, lamb_t, mu, sig = np.nan, np.nan, np.nan, np.nan
+        try:
+            psd_ds, lamb_x, lamb_t = metrics.psd_based_scores(self.test_xr_ds.pred, self.test_xr_ds.gt)
+            psd_fig = metrics.plot_psd_score(psd_ds)
+            self.test_figs['psd'] = psd_fig
+            self.logger.experiment.add_figure(f'{log_pref} PSD', psd_fig, global_step=self.current_epoch)
+            _, _, mu, sig = metrics.rmse_based_scores(self.test_xr_ds.pred, self.test_xr_ds.gt)
+        except:
+            print('fail to compute psd scores')
 
         md = {
             f'{log_pref}_lambda_x': lamb_x,
@@ -162,7 +165,7 @@ class LitModelOI(LitModelAugstate):
         self.test_dates = self.test_coords['time'].data
 
         # display map
-        md = self.sla_diag(t_idx=3, log_pref=log_pref)
+        md = self.sla_diag(t_idx=2, log_pref=log_pref)
         self.latest_metrics.update(md)
         self.logger.log_metrics(md, step=self.current_epoch)
 

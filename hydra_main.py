@@ -11,6 +11,24 @@ from hydra.utils import get_class, instantiate, call
 from omegaconf import OmegaConf
 import hydra_config
 import numpy as np
+import hashlib
+import json
+from dashtable import data2rst
+
+
+def _hash(_model):
+    d = _model.state_dict()
+    for key, value in d.items():
+        if isinstance(value, torch.Tensor):
+            d[key] = value.cpu().numpy().tolist()
+    return hashlib.sha256(
+        json.dumps(d, sort_keys=True).encode('utf8')
+    ).hexdigest()[:10]
+
+
+def _hit(_model):  # hash, id, type
+    return _hash(_model), str(id(_model))[-10:], type(_model)
+
 
 def get_profiler():
     from pytorch_lightning.profiler import PyTorchProfiler
@@ -31,6 +49,8 @@ def get_profiler():
             record_shapes=True,
             profile_memory=True,
     )
+
+
 class FourDVarNetHydraRunner:
     def __init__(self, params, dm, lit_mod_cls, callbacks=None, logger=None):
         self.cfg = params
@@ -151,6 +171,141 @@ class FourDVarNetHydraRunner:
                                )
         return mod
 
+    def _inject_OI_to_MP(self, mod, ckpt_path):
+        _mod = self.lit_cls.load_from_checkpoint(
+            ckpt_path,
+            hparam=self.cfg,
+            strict=False,
+            test_domain=self.cfg.test_domain,
+            mean_Tr=self.mean_Tr,
+            mean_Tt=self.mean_Tt,
+            mean_Val=self.mean_Val,
+            var_Tr=self.var_Tr,
+            var_Tt=self.var_Tt,
+            var_Val=self.var_Val,
+        )
+
+        print('\n---- IN _inject_OI_to_MP ----\n')
+
+        print('>>> ckpt_path:', ckpt_path, '\n')
+
+        _headers = [
+            '',
+            'mod (hash)', 'mod (id)', 'mod (type)',
+            '_mod (hash)', '_mod (id)', '_mod (type)'
+        ]
+
+        print('>>> 0. General')
+        print(data2rst(
+            [
+                _headers,
+                ['.', *_hit(mod), *_hit(_mod)],
+                [
+                    '.model',
+                    *_hit(mod.model),
+                    *_hit(_mod.model)
+                ],
+                [
+                    '.model.phi_r',
+                    *_hit(mod.model.phi_r),
+                    *_hit(_mod.model.phi_r)
+                ],
+            ],
+            use_headers=True,
+        ))
+
+        print('>>> 1. Injecting _mod into mod')
+        print(data2rst(
+            [
+                _headers,
+                [
+                    '.model.model_H',
+                    *_hit(mod.model.model_H),
+                    *_hit(_mod.model.model_H)
+                ],
+                [
+                    '.model.model_Grad',
+                    *_hit(mod.model.model_Grad),
+                    *_hit(_mod.model.model_Grad)
+                ],
+                [
+                    '.model.model_VarCost',
+                    *_hit(mod.model.model_VarCost),
+                    *_hit(_mod.model.model_VarCost)
+                ],
+            ],
+            use_headers=True,
+        ))
+        mod.model.model_H.load_state_dict(_mod.model.model_H.state_dict())
+        mod.model.model_Grad.load_state_dict(_mod.model.model_Grad.state_dict())
+        mod.model.model_VarCost.load_state_dict(_mod.model.model_VarCost.state_dict())
+        print('>>> after transfer:')
+        print(data2rst(
+            [
+                _headers,
+                [
+                    '.model.model_H',
+                    *_hit(mod.model.model_H),
+                    *_hit(_mod.model.model_H)
+                ],
+                [
+                    '.model.model_Grad',
+                    *_hit(mod.model.model_Grad),
+                    *_hit(_mod.model.model_Grad)
+                ],
+                [
+                    '.model.model_VarCost',
+                    *_hit(mod.model.model_VarCost),
+                    *_hit(_mod.model.model_VarCost)
+                ],
+            ],
+            use_headers=True,
+        ))
+
+        print(">>> 2. Injecting _mod's phi into mod's priors[0]")
+        _phis = []
+        for i in range(len(mod.model.phi_r.priors)):
+            cphi = mod.model.phi_r.priors[i]
+            rowlegend = f'.model.phi_r.priors[{i}]'
+
+            _phis.append([
+                rowlegend,
+                *_hit(cphi),
+                *_hit(_mod.model.phi_r)
+            ])
+
+            # transfer
+            mod.model.phi_r.priors[i].load_state_dict(_mod.model.phi_r.state_dict())
+
+        # Noise last prior's last layer (N(0, 10⁻²))
+        # mod.model.phi_r.priors[-1].noise_last_layer(0., .01)
+
+        print(data2rst(
+            [_headers, *_phis],
+            use_headers=True,
+        ))
+
+        print('>>> after transfer:')
+        _phis = []
+        for i in range(len(mod.model.phi_r.priors)):
+            cphi = mod.model.phi_r.priors[i]
+            rowlegend = f'.model.phi_r.priors[{i}]'
+
+            _phis.append([
+                rowlegend,
+                *_hit(cphi),
+                *_hit(_mod.model.phi_r)
+            ])
+
+        print(data2rst(
+            [_headers, *_phis],
+            use_headers=True,
+        ))
+
+        print(mod)
+
+        print('>>> LEAVING _turn_OI_to_MP')
+
     def train(self, ckpt_path=None, **trainer_kwargs):
         """
         Train a model
@@ -161,8 +316,9 @@ class FourDVarNetHydraRunner:
 
         mod = self._get_model(ckpt_path=ckpt_path)
 
-        print('>>>', mod)
-        input()
+        qmodel_path = trainer_kwargs.pop('qmodel_path', None)
+        if qmodel_path:
+            self._inject_OI_to_MP(mod, qmodel_path)
 
         checkpoint_callback = ModelCheckpoint(monitor='val_loss',
                                               filename=self.filename_chkpt,
@@ -190,6 +346,7 @@ class FourDVarNetHydraRunner:
         :param dataloader: Dataloader on which to run the test Checkpoint from which to resume
         :param trainer_kwargs: (Optional)
         """
+        trainer_kwargs.pop('qmodel_path', None)
         trainer = _trainer or pl.Trainer(
             num_nodes=1, gpus=1, accelerator=None, **trainer_kwargs,
         )
@@ -225,6 +382,7 @@ class FourDVarNetHydraRunner:
                 'max_epochs': 1,
             }
         )
+
 
 def _main(cfg):
     print(OmegaConf.to_yaml(cfg))

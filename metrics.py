@@ -170,8 +170,8 @@ def plot(ax, lon, lat, data, title, cmap, norm, extent=[-65, -55, 30, 40], gridd
         gl.ylabel_style = {'fontsize': 10}
     except Exception as e:
         import traceback
-        print(traceback.format_exc()) 
-        
+        print(traceback.format_exc())
+
 
 def gradient(img, order):
     """ calculate x, y gradient and magnitude """
@@ -725,12 +725,14 @@ def psd_based_scores(da_rec, da_ref):
 
     # Compute error = SSH_reconstruction - SSH_true
     err = (da_rec - da_ref)
-    err = err.chunk({"lat":1, 'time': err['time'].size, 'lon': err['lon'].size})
+    # err = err.chunk({"lat":1, 'time': err['time'].size, 'lon': err['lon'].size})
     # make time vector in days units
     err['time'] = (err.time - err.time[0]) / np.timedelta64(1, 'D')
 
+
     # Rechunk SSH_true
-    signal = da_ref.chunk({"lat":1, 'time': da_ref['time'].size, 'lon': da_ref['lon'].size})
+    # signal = da_ref.chunk({"lat":1, 'time': da_ref['time'].size, 'lon': da_ref['lon'].size})
+    signal = da_ref
     # make time vector in days units
     signal['time'] = (signal.time - signal.time[0]) / np.timedelta64(1, 'D')
 

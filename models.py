@@ -288,11 +288,14 @@ class DoubleConv(torch.nn.Module):
 class MultiPriors(torch.nn.Module):
     def __init__(
         self, n_priors, shape_data, dim_ae, dw, dw2, ss, n_blocks, rate_dr,
-        in_channel,
+        in_channel=None,
     ):
         super().__init__()
         self.priors = torch.nn.ModuleList()
         self.weights = torch.nn.ModuleList()
+
+        if not in_channel:
+            in_channel = shape_data[0]
 
         for _ in range(n_priors):
             self.priors.append(
