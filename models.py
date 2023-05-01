@@ -249,3 +249,111 @@ class ModelLR(torch.nn.Module):
     def forward(self, im):
         return self.pool(im)
 
+
+class DoubleConv(torch.nn.Module):
+    """(convolution => [BN] => ReLU) * 2, used for UNet implentation"""
+
+    def __init__(
+            self, in_channels, out_channels, mid_channels=None, rateDropout=0.,
+            padding_mode='reflect',
+        ):
+        super().__init__()
+        if not mid_channels:
+            mid_channels = out_channels
+
+        self.double_conv = torch.nn.Sequential(
+            torch.nn.Conv2d(
+                in_channels, mid_channels, kernel_size=3, padding=1, bias=False,
+                padding_mode=padding_mode,
+            ),
+            torch.nn.BatchNorm2d(mid_channels),
+            torch.nn.ReLU(inplace=True),
+            torch.nn.Dropout(rateDropout),
+            torch.nn.Conv2d(
+                mid_channels, out_channels, kernel_size=3, padding=1, bias=False,
+                padding_mode=padding_mode,
+            ),
+            torch.nn.BatchNorm2d(out_channels),
+            torch.nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        return self.double_conv(x)
+
+
+# ---------------------------------------------------------------------
+# Multi prior model
+# ---------------------------------------------------------------------
+
+class MultiPriors(torch.nn.Module):
+    def __init__(
+        self, n_priors, shape_data, dim_ae, dw, dw2, ss, n_blocks, rate_dr,
+        in_channel,
+    ):
+        super().__init__()
+        self.priors = torch.nn.ModuleList()
+        self.weights = torch.nn.ModuleList()
+
+        for _ in range(n_priors):
+            self.priors.append(
+                Phi_r_OI(shape_data[0], dim_ae, dw, dw2, ss, n_blocks, rate_dr)
+            )
+            self.weights.append(
+                MPWeight(shape_data, dw, in_channel)
+            )
+
+    def __len__(self):
+        return len(self.priors)
+
+    @torch.no_grad()
+    def get_intermediate_results(self, x_in):
+        x_in = x_in.to(x_in)
+
+        results_dict = {}
+        weights_dict = {}
+
+        for i in range(len(self.priors)):
+            phi_r = self.priors[i].to(x_in)
+            weight = self.weights[i].to(x_in)
+
+            phi_out = phi_r(x_in).detach().to('cpu')
+            weight_out = weight(x_in).detach().to('cpu')
+
+            weights_dict[f'phi{i}_weight'] = weight_out
+            results_dict[f'phi{i}_out'] =  phi_out
+
+        return results_dict, weights_dict
+
+    def forward(self, x_in):
+        x_out = torch.zeros_like(x_in).to(x_in)
+
+        for i in range(len(self.priors)):
+            phi_r = self.priors[i].to(x_in)
+            weight = self.weights[i].to(x_in)
+
+            phi_out = phi_r(x_in)
+            weight_out = weight(x_in)
+
+            x_out = torch.add(x_out, torch.mul(weight_out, phi_out))
+
+        return x_out
+
+
+class MPWeight(torch.nn.Module):
+    def __init__(self, shape_data, dw, in_channels):
+        super().__init__()
+        self.shape_data = shape_data
+
+        self.avg_pool_conv = torch.nn.Sequential(
+            DoubleConv(in_channels, in_channels*8),
+            torch.nn.AvgPool2d(2),
+            torch.nn.BatchNorm2d(in_channels * 8),
+            torch.nn.Conv2d(in_channels * 8, shape_data[0], (2 * dw + 1, 2 * dw + 1), padding=dw),
+            torch.nn.Sigmoid()
+        )
+
+    def forward(self, x_in):
+        x_out  = self.avg_pool_conv(x_in)
+        x_out = F.interpolate(x_out, (self.shape_data[2], self.shape_data[1]))
+
+        return x_out

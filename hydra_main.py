@@ -161,6 +161,9 @@ class FourDVarNetHydraRunner:
 
         mod = self._get_model(ckpt_path=ckpt_path)
 
+        print('>>>', mod)
+        input()
+
         checkpoint_callback = ModelCheckpoint(monitor='val_loss',
                                               filename=self.filename_chkpt,
                                               save_top_k=3,

@@ -1,6 +1,6 @@
 import einops
 import torch.distributed as dist
-import kornia
+import hydra
 from hydra.utils import instantiate
 import pandas as pd
 from functools import reduce
@@ -18,7 +18,7 @@ from scipy import stats
 import solver as NN_4DVar
 import metrics
 from metrics import save_netcdf, nrmse, nrmse_scores, mse_scores, plot_nrmse, plot_mse, plot_snr, plot_maps_oi, animate_maps, get_psd_score
-from models import Model_H, Phi_r_OI, Gradient_img
+from models import Model_H, Phi_r_OI, MultiPriors
 
 from lit_model_augstate import LitModelAugstate
 
@@ -31,10 +31,27 @@ def get_4dvarnet_OI(hparams):
                     hparams.dim_grad_solver, hparams.dropout),
                 hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
 
+def get_multipriors(hparams):
+    return NN_4DVar.Solver_Grad_4DVarNN(
+        MultiPriors(
+            hparams.n_priors, hparams.shape_state, hparams.DimAE, hparams.dW,
+            hparams.dW2, hparams.sS, hparams.nbBlocks, hparams.dropout_phi_r,
+        ),
+        Model_H(hparams.shape_state[0]),
+        NN_4DVar.model_GradUpdateLSTM(
+            hparams.shape_state, hparams.UsePriodicBoundary,
+            hparams.dim_grad_solver, hparams.dropout,
+        ),
+        hparams.norm_obs, hparams.norm_prior, hparams.shape_state,
+        hparams.n_grad * hparams.n_fourdvar_iter
+    )
+
+
 class LitModelOI(LitModelAugstate):
     MODELS = {
-            '4dvarnet_OI': get_4dvarnet_OI,
-             }
+        '4dvarnet_OI': get_4dvarnet_OI,
+        'multipriors': get_multipriors,
+    }
 
     def __init__(self, *args, **kwargs):
          super().__init__(*args, **kwargs)
@@ -43,7 +60,7 @@ class LitModelOI(LitModelAugstate):
         opt = torch.optim.Adam
         if hasattr(self.hparams, 'opt'):
             opt = lambda p: hydra.utils.call(self.hparams.opt, p)
-        if self.model_name == '4dvarnet_OI':
+        if self.model_name in ('4dvarnet_OI', 'multipriors'):
             optimizer = opt([{'params': self.model.model_Grad.parameters(), 'lr': self.hparams.lr_update[0]},
                 {'params': self.model.model_VarCost.parameters(), 'lr': self.hparams.lr_update[0]},
                 {'params': self.model.model_H.parameters(), 'lr': self.hparams.lr_update[0]},
@@ -61,20 +78,37 @@ class LitModelOI(LitModelAugstate):
             self.log(f'{log_pref}_mse', metrics[-1]["mse"] / self.var_Tt, on_step=False, on_epoch=True, prog_bar=True)
             self.log(f'{log_pref}_mseG', metrics[-1]['mseGrad'] / metrics[-1]['meanGrad'], on_step=False, on_epoch=True, prog_bar=True)
 
-        return {'gt'    : (targets_GT.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
-                'obs_inp'    : (inputs_obs.detach().where(inputs_Mask, torch.full_like(inputs_obs, np.nan)).cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr,
-                'pred' : (out.detach().cpu() * np.sqrt(self.var_Tr)) + self.mean_Tr}
+        _d = lambda X: X.detach().cpu() * np.sqrt(self.var_Tr) + self.mean_Tr
+
+        results = {
+            'gt': _d(targets_GT),
+            'obs_inp': _d(
+                inputs_obs
+                .where(inputs_Mask, torch.full_like(inputs_obs, np.nan))
+            ),
+            'pred': _d(out),
+        }
+
+        if self.model_name == 'multipriors':
+            _priors, _weights = self.model.phi_r.get_intermediate_results(
+                out.detach()
+            )
+
+            results |= _priors
+            results |= _weights
+
+        return results
 
     def sla_diag(self, t_idx=3, log_pref='test'):
 
-        path_save0 = self.logger.log_dir + '/maps.png'
+        path_save0 = self.logger.log_dir + f'/{log_pref}_maps.png'
         t_idx = 3
         fig_maps = plot_maps_oi(
                   self.x_gt[t_idx],
                 self.obs_inp[t_idx],
                   self.x_rec[t_idx],
                   self.test_lon, self.test_lat, path_save0)
-        path_save01 = self.logger.log_dir + '/maps_Grad.png'
+        path_save01 = self.logger.log_dir + f'/{log_pref}_maps_Grad.png'
         fig_maps_grad = plot_maps_oi(
                   self.x_gt[t_idx],
                 self.obs_inp[t_idx],
@@ -114,7 +148,7 @@ class LitModelOI(LitModelAugstate):
         self.test_xr_ds = self.build_test_xr_ds(full_outputs, diag_ds=diag_ds)
 
         Path(self.logger.log_dir).mkdir(exist_ok=True)
-        path_save1 = self.logger.log_dir + f'/test.nc'
+        path_save1 = self.logger.log_dir + f'/{log_pref}.nc'
         self.test_xr_ds.to_netcdf(path_save1)
 
         self.x_gt = self.test_xr_ds.gt.data
