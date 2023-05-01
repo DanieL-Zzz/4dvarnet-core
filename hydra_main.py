@@ -11,6 +11,24 @@ from hydra.utils import get_class, instantiate, call
 from omegaconf import OmegaConf
 import hydra_config
 import numpy as np
+import hashlib
+import json
+from dashtable import data2rst
+
+
+def _hash(_model):
+    d = _model.state_dict()
+    for key, value in d.items():
+        if isinstance(value, torch.Tensor):
+            d[key] = value.cpu().numpy().tolist()
+    return hashlib.sha256(
+        json.dumps(d, sort_keys=True).encode('utf8')
+    ).hexdigest()[:10]
+
+
+def _hit(_model):  # hash, id, type
+    return _hash(_model), str(id(_model))[-10:], type(_model)
+
 
 def get_profiler():
     from pytorch_lightning.profiler import PyTorchProfiler
@@ -31,6 +49,8 @@ def get_profiler():
             record_shapes=True,
             profile_memory=True,
     )
+
+
 class FourDVarNetHydraRunner:
     def __init__(self, params, dm, lit_mod_cls, callbacks=None, logger=None):
         self.cfg = params
@@ -109,23 +129,6 @@ class FourDVarNetHydraRunner:
         return mod
 
     def _inject_OI_to_MP(self, mod, ckpt_path):
-        import hashlib
-        import json
-
-        from dashtable import data2rst
-
-        def _hash(_model):
-            d = _model.state_dict()
-            for key, value in d.items():
-                if isinstance(value, torch.Tensor):
-                    d[key] = value.cpu().numpy().tolist()
-            return hashlib.sha256(
-                json.dumps(d, sort_keys=True).encode('utf8')
-            ).hexdigest()[:10]
-
-        def _hit(_model):  # hash, id, type
-            return _hash(_model), str(id(_model))[-10:], type(_model)
-
         _mod = self.lit_cls.load_from_checkpoint(
             ckpt_path,
             hparam=self.cfg,
@@ -287,10 +290,13 @@ class FourDVarNetHydraRunner:
         accelerator = "ddp" if (num_gpus * num_nodes) > 1 else None
         trainer_kwargs_final = {**dict(num_nodes=num_nodes, gpus=gpus, logger=self.logger, strategy=accelerator, auto_select_gpus=(num_gpus * num_nodes) > 0,
                              callbacks=[checkpoint_callback, lr_monitor]),  **trainer_kwargs}
-        print(trainer_kwargs)
-        print(trainer_kwargs_final)
+        # print(trainer_kwargs)
+        # print(trainer_kwargs_final)
         trainer = pl.Trainer(**trainer_kwargs_final)
         trainer.fit(mod, self.dataloaders['train'], self.dataloaders['val'])
+
+        print('>>> final model:', _hash(mod))
+
         return mod, trainer
 
     def test(self, ckpt_path=None, dataloader="test", _mod=None, _trainer=None, **trainer_kwargs):
@@ -304,6 +310,8 @@ class FourDVarNetHydraRunner:
             num_nodes=1, gpus=1, accelerator=None, **trainer_kwargs,
         )
         mod = _mod or self._get_model(ckpt_path=ckpt_path)
+
+        print('>>> loaded model:', _hash(mod))
 
         trainer.test(mod, dataloaders=self.dataloaders[dataloader])
         return mod
