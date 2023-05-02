@@ -1,7 +1,7 @@
 # @package _global_
 
 entrypoint:
-  max_epochs: 1
+  max_epochs: 150
   progress_bar_refresh_rate: 5
   limit_train_batches: 1.0
   qmodel_path: /sanssauvegarde/homes/d22zhu/Lab/archives/lx691_lt406_mu959.ckpt
@@ -45,9 +45,9 @@ params:
   n_fourdvar_iter: 1
   weight_decay: ???
   model: multipriors
-  n_priors: 2
+  n_priors: 1
   sst: false
-  val_diag_freq: 1
+  val_diag_freq: 3
   n_grad: 5
   dT: 24
   aug_state: false

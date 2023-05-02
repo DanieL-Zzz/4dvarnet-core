@@ -288,22 +288,25 @@ class DoubleConv(torch.nn.Module):
 class MultiPriors(torch.nn.Module):
     def __init__(
         self, n_priors, shape_data, dim_ae, dw, dw2, ss, n_blocks, rate_dr,
-        in_channel=None,
+        stochastic, in_channel=None,
     ):
         super().__init__()
         self.priors = torch.nn.ModuleList()
-        self.weights = torch.nn.ModuleList()
+        # self.weights = torch.nn.ModuleList()
 
         if not in_channel:
             in_channel = shape_data[0]
 
         for _ in range(n_priors):
             self.priors.append(
-                Phi_r_OI(shape_data[0], dim_ae, dw, dw2, ss, n_blocks, rate_dr)
+                Phi_r_OI(
+                    shape_data[0], dim_ae, dw, dw2, ss, n_blocks, rate_dr,
+                    stochastic,
+                )
             )
-            self.weights.append(
-                MPWeight(shape_data, dw, in_channel)
-            )
+            # self.weights.append(
+            #     MPWeight(shape_data, dw, in_channel)
+            # )
 
     def __len__(self):
         return len(self.priors)
@@ -317,10 +320,14 @@ class MultiPriors(torch.nn.Module):
 
         for i in range(len(self.priors)):
             phi_r = self.priors[i].to(x_in)
-            weight = self.weights[i].to(x_in)
+            # weight = self.weights[i].to(x_in)
 
             phi_out = phi_r(x_in).detach().to('cpu')
-            weight_out = weight(x_in).detach().to('cpu')
+            # weight_out = weight(x_in).detach().to('cpu')
+            if i == 0:
+                weight_out = torch.ones_like(phi_out)
+            else:
+                weight_out = torch.zeros_like(phi_out)
 
             weights_dict[f'phi{i}_weight'] = weight_out
             results_dict[f'phi{i}_out'] =  phi_out
@@ -332,10 +339,14 @@ class MultiPriors(torch.nn.Module):
 
         for i in range(len(self.priors)):
             phi_r = self.priors[i].to(x_in)
-            weight = self.weights[i].to(x_in)
+            # weight = self.weights[i].to(x_in)
 
             phi_out = phi_r(x_in)
-            weight_out = weight(x_in)
+            # weight_out = weight(x_in)
+            if i == 0:
+                weight_out = torch.ones_like(phi_out)
+            else:
+                weight_out = torch.zeros_like(phi_out)
 
             x_out = torch.add(x_out, torch.mul(weight_out, phi_out))
 
