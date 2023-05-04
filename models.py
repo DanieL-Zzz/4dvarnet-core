@@ -508,8 +508,8 @@ class Multi_Prior(torch.nn.Module):
         if not in_channel:
             in_channel = shape_data[0]
 
-        self.phi_list = []
-        self.weights_list = []
+        self.phi_list = torch.nn.ModuleList()
+        self.weights_list = torch.nn.ModuleList()
 
         for _ in range(nb_phi):
             self.phi_list.append(
