@@ -53,9 +53,9 @@ params:
   lr_scheduler: ${lr_scheduler}
   n_fourdvar_iter: 3
   weight_decay: ???
-  model: lat_lon_multi_prior
+  model: multi_prior
   sst: false
-  val_diag_freq: 5
+  val_diag_freq: 1
   n_grad: 5
   dT: 24
   aug_state: false
@@ -147,7 +147,7 @@ datamodule:
     batch_size: 2
     num_workers: 2
   dataset_class:
-    _target_: dataloading.FourDVarNetDatasetLatLon
+    _target_: dataloading.FourDVarNetDataset
     _partial_: true
   dim_range:
     lat:
