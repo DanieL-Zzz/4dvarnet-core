@@ -159,6 +159,15 @@ class Phi_r_OI(torch.nn.Module):
         self.correlate_noise = CorrelateNoise(shape_data, 10)
         self.regularize_variance = RegularizeVariance(shape_data, 10)
 
+    @torch.no_grad()
+    def noise_last_layer(self, mean, std):
+        # Modify the encoder's last layer because the decoder does not
+        # have layers.
+        last_layers_weight = self.encoder.nn[-1].conv3.weight
+        last_layers_weight.add_(
+            torch.normal(mean, std, size=last_layers_weight.shape)
+        )
+
     def forward(self, x):
         white = True
         if self.stochastic == True:

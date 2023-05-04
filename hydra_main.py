@@ -235,7 +235,7 @@ class FourDVarNetHydraRunner:
             mod.model.phi_r.phi_list[i].load_state_dict(_mod.model.phi_r.state_dict())
 
         # Noise last prior's last layer (N(0, 10⁻²))
-        # mod.model.phi_r.phi_list[-1].noise_last_layer(0., .01)
+        mod.model.phi_r.phi_list[-1].noise_last_layer(0., .01)
 
         print(data2rst(
             [_headers, *_phis],
