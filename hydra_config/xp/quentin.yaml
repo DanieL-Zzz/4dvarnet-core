@@ -3,10 +3,16 @@
 entrypoint:
   # _target_: hydra_main.FourDVarNetHydraRunner.train
   # ckpt_path: null
-  max_epochs: 180
+  max_epochs: 30
   progress_bar_refresh_rate: 5
   limit_train_batches: 1.0
 xp_name: QOIMP
+
+lr_scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  _partial_: true
+  T_max: ${entrypoint.max_epochs}
+
 params:
   nb_phi: 2
   files_cfg:
@@ -44,6 +50,7 @@ params:
   - 0.001
   - 0.001
   - 0.001
+  lr_scheduler: ${lr_scheduler}
   n_fourdvar_iter: 3
   weight_decay: ???
   model: lat_lon_multi_prior

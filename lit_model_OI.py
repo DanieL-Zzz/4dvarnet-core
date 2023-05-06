@@ -1,28 +1,16 @@
-import einops
-import torch.distributed as dist
-import kornia
-from hydra.utils import instantiate
+import hydra
 import pandas as pd
-from functools import reduce
-from torch.nn.modules import loss
 from torch import nn
 import xarray as xr
 from pathlib import Path
 from hydra.utils import call
 import numpy as np
-import pytorch_lightning as pl
 import torch
-import torch.nn.functional as F
-import torch.optim as optim
-from omegaconf import OmegaConf
-from scipy import stats
 import solver as NN_4DVar
 import metrics
-from metrics import (save_netcdf, nrmse, nrmse_scores, mse_scores, plot_nrmse,
-plot_mse, plot_snr, plot_maps_oi, animate_maps, get_psd_score)
-from models import Model_H, Model_HwithSST, Phi_r_OI,Phi_r_OI_linear, Gradient_img, UNet, Phi_r_UNet, Multi_Prior, Lat_Lon_Multi_Prior
+from metrics import plot_maps_oi
+from models import Model_H, Phi_r_OI, Multi_Prior, Lat_Lon_Multi_Prior
 from lit_model_augstate import LitModelAugstate
-
 
 
 def get_4dvarnet_OI(hparams):
@@ -34,68 +22,6 @@ def get_4dvarnet_OI(hparams):
                     hparams.dim_grad_solver, hparams.dropout),
                 hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
 
-def get_4dvarnet_OI_sst(hparams):
-    return NN_4DVar.Solver_Grad_4DVarNN(
-                Phi_r_OI(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
-                    hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic),
-                Model_HwithSST(hparams.shape_state[0], dT=hparams.dT),
-                NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                    hparams.dim_grad_solver, hparams.dropout),
-                hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-#4dvarnet with linear phi_r instead of bilinear units
-def get_4dvarnet_OI_linear(hparams):
-    return NN_4DVar.Solver_Grad_4DVarNN(
-                Phi_r_OI_linear(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
-                    hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic),
-                Model_H(hparams.shape_state[0]),
-                NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                    hparams.dim_grad_solver, hparams.dropout),
-                hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-#Unet with batch normalization
-def get_4dvarnet_unet_bn(hparams):
-    return NN_4DVar.Solver_Grad_4DVarNN(
-                nn.Sequential(
-            nn.BatchNorm2d(hparams.shape_state[0]),
-            Phi_r_UNet(hparams.shape_state[0], hparams.dropout_phi_r, hparams.stochastic,False, shrink_factor=hparams.UNet_shrink_factor)
-        ),
-                Model_H(hparams.shape_state[0]),
-                NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                    hparams.dim_grad_solver, hparams.dropout),
-                hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-
-def get_4dvarnet_unet(hparams):
-    return NN_4DVar.Solver_Grad_4DVarNN(
-            Phi_r_UNet(hparams.shape_state[0], hparams.dropout_phi_r, hparams.stochastic,False, shrink_factor=hparams.UNet_shrink_factor),
-                Model_H(hparams.shape_state[0]),
-                NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                    hparams.dim_grad_solver, hparams.dropout),
-                hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-
-
-
-def get_4dvarnet_unet_sst(hparams):
-    return NN_4DVar.Solver_Grad_4DVarNN(
-                Phi_r_UNet(hparams.shape_state[0], hparams.dropout_phi_r, hparams.stochastic,False, shrink_factor=hparams.UNet_shrink_factor),
-                Model_HwithSST(hparams.shape_state[0], dT=hparams.dT),
-                NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
-                    hparams.dim_grad_solver, hparams.dropout),
-                hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-
-#Direct UNet with no solver
-def get_UNet_direct(hparams):
-    class PhiPassThrough(torch.nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.phi =  nn.Sequential(
-            nn.BatchNorm2d(hparams.shape_state[0]),
-            Phi_r_UNet(hparams.shape_state[0], hparams.dropout_phi_r, hparams.stochastic,False, shrink_factor=hparams.UNet_shrink_factor)
-        )
-            self.phi_r = torch.nn.Identity()
-            self.n_grad = 0
-
-        def forward(self, state, obs, masks, *internal_state):
-            return self.phi(state), None, None, None
-    return PhiPassThrough()
 
 def get_multi_prior(hparams):
     return NN_4DVar.Solver_Grad_4DVarNN(
@@ -105,6 +31,7 @@ def get_multi_prior(hparams):
                 NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
                     hparams.dim_grad_solver, hparams.dropout),
                 hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
+
 
 def get_lat_lon_multi_prior(hparams):
     return NN_4DVar.Solver_Grad_4DVarNN_Lat_Lon(
@@ -116,60 +43,37 @@ def get_lat_lon_multi_prior(hparams):
                 hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
 
 
-#UNet and a fixed point solver
-def get_UNet_fixed_point(hparams):
-    return NN_4DVar.FP_Solver(
-        nn.Sequential(
-            nn.BatchNorm2d(hparams.shape_state[0]),
-            Phi_r_UNet(hparams.shape_state[0], hparams.dropout_phi_r, hparams.stochastic, shrink_factor=hparams.UNet_shrink_factor)
-        ),
-    hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-
-#4dvarnet with the phi_r_OI and a fixed point solver
-def get_phi_r_fixed_point(hparams):
-    return NN_4DVar.FP_Solver(
-         nn.Sequential(
-            nn.BatchNorm2d(hparams.shape_state[0]),
-            Phi_r_OI(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
-                        hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic)),
-    hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
-
 class LitModelOI(LitModelAugstate):
     MODELS = {
         '4dvarnet_OI': get_4dvarnet_OI,
-        '4dvarnet_OI_sst': get_4dvarnet_OI_sst,
-        '4dvarnet_OI_linear': get_4dvarnet_OI_linear,
-        '4dvarnet_UNet_sst': get_4dvarnet_unet_sst,
-        '4dvarnet_UNet': get_4dvarnet_unet,
-        'UNet_direct': get_UNet_direct,
-        'UNet_FP': get_UNet_fixed_point,
-        'phi_r_FP': get_phi_r_fixed_point,
         'multi_prior': get_multi_prior,
         'lat_lon_multi_prior': get_lat_lon_multi_prior
      }
 
-    # def add_model_specific_args(self, parent_parser):
-    #     parser = parent_parser.add_argument_group("LitModel_OI")
-    #     parser.add_argument("--FP_iterations", type=int, default=self.hparams.n_grad * self.hparams.n_fourdvar_iter)
-
     def configure_optimizers(self):
         opt = torch.optim.Adam
+
         if hasattr(self.hparams, 'opt'):
             opt = lambda p: hydra.utils.call(self.hparams.opt, p)
-        if self.model_name in ['4dvarnet_OI','4dvarnet_OI_linear', '4dvarnet_OI_sst', '4dvarnet_UNet','4dvarnet_UNet_sst', 'multi_prior', 'lat_lon_multi_prior']:
-            optimizer = opt([{'params': self.model.model_Grad.parameters(), 'lr': self.hparams.lr_update[0]},
-                {'params': self.model.model_VarCost.parameters(), 'lr': self.hparams.lr_update[0]},
-                {'params': self.model.model_H.parameters(), 'lr': self.hparams.lr_update[0]},
-                {'params': self.model.phi_r.parameters(), 'lr': 0.5 * self.hparams.lr_update[0]},
-                ])
-        elif self.model_name in ['4dvarnet_UNet_gradient']:
-            optimizer = opt([{'params': self.model.phi_r.parameters(), 'lr': self.hparams.lr_update[0]},
-                {'params': self.model.model_H.parameters(), 'lr': self.hparams.lr_update[0]}
-                ])
-        elif self.model_name in [ 'UNet_direct','UNet_FP', 'phi_r_FP']:
-            optimizer = opt([{'params': self.model.parameters(), 'lr': self.hparams.lr_update[0]}])
 
+        _lr = self.hparams.lr_update[0]
+        optimizer = opt([
+            {'params': self.model.model_Grad.parameters(), 'lr': _lr},
+            {'params': self.model.model_VarCost.parameters(), 'lr': _lr},
+            {'params': self.model.model_H.parameters(), 'lr': _lr},
+            {'params': self.model.phi_r.parameters(), 'lr': 0.5*_lr},
+        ])
 
+        _lr_scheduler = self.hparams.get('lr_scheduler', None)
+        if _lr_scheduler:
+            print('>>> using a learning scheduler:', _lr_scheduler)
+            _partial = hydra.utils.instantiate(_lr_scheduler)
+            lr_scheduler = _partial(optimizer=optimizer)
+
+            return {
+                'optimizer': optimizer,
+                'lr_scheduler': lr_scheduler,
+            }
         return optimizer
 
     def diag_step(self, batch, batch_idx, log_pref='test'):
