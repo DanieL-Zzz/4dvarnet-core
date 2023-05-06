@@ -275,8 +275,8 @@ class FourDVarNetHydraRunner:
         # Multi_Prior_Lat_Lon, so we do not load the checkpoint in
         # `_get_model`, instead we will inject the loaded sub-models
         # into the blank Lat_Lon_Multi_Prior.
-        mod = self._get_model()
-        self._inject_OI_to_MP(mod, ckpt_path)
+        mod = self._get_model(ckpt_path)
+        # self._inject_OI_to_MP(mod, ckpt_path)
 
         checkpoint_callback = ModelCheckpoint(monitor='val_loss',
                                               filename=self.filename_chkpt,
