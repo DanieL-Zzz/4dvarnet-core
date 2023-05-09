@@ -50,7 +50,7 @@ params:
   - 0.001
   - 0.001
   - 0.001
-  lr_scheduler: ${lr_scheduler}
+  lr_scheduler: null  # ${lr_scheduler}
   n_fourdvar_iter: 3
   weight_decay: ???
   model: multi_prior
