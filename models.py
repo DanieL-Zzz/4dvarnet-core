@@ -483,7 +483,7 @@ class Weight_Network(torch.nn.Module):
 
         self.avg_pool_conv = torch.nn.Sequential(
             DoubleConv(in_channels, in_channels*8),
-            torch.nn.AvgPool2d(2),
+            torch.nn.AvgPool2d(10),
             torch.nn.BatchNorm2d(in_channels * 8),
             # DoubleConv(in_channels * 2, in_channels * 4), #From DoubleConv from the UNet section
             # torch.nn.AvgPool2d(2),
@@ -501,8 +501,11 @@ class Weight_Network(torch.nn.Module):
     def forward(self, x_in):
         x_out  = self.avg_pool_conv(x_in)
         #TODO need to make sure that this works for non-square windows
-        x_out = interpolate(x_out, (self.shape_data[2],self.shape_data[1]))
-        #x_out = interpolate(x_out, (self.shape_data[2],self.shape_data[1]), mode='bilinear', align_corners=True)
+        x_out = interpolate(
+            input=x_out,
+            size=(self.shape_data[2], self.shape_data[1]),
+            mode='bicubic',
+        )
         return x_out
 
 
