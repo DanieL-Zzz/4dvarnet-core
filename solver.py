@@ -396,21 +396,23 @@ class Solver_Grad_4DVarNN(nn.Module):
         with torch.no_grad():
             self.n_grad = int(n_iter_grad)
 
-    def forward(self, x, yobs, mask, *internal_state):
-        return self.solve(x, yobs, mask, *internal_state)
+    def forward(self, x, yobs, mask, epoch=-1, *internal_state):
+        return self.solve(x, yobs, mask, epoch, *internal_state)
 
-    def solve(self, x_0, obs, mask, hidden=None, cell=None, normgrad_=0.):
+    def solve(self, x_0, obs, mask, epoch, hidden=None, cell=None, normgrad_=0.):
         x_k = torch.mul(x_0,1.)
         x_k_plus_1 = None
-        for _ in range(self.n_grad):
-            x_k_plus_1, hidden, cell, normgrad_ = self.solver_step(x_k, obs, mask,hidden, cell, normgrad_)
+        for i in range(self.n_grad):
+            _nth = i if 0 <= epoch < 30 else None
+
+            x_k_plus_1, hidden, cell, normgrad_ = self.solver_step(x_k, obs, mask,hidden, cell, normgrad_, _nth)
 
             x_k = torch.mul(x_k_plus_1,1.)
 
         return x_k_plus_1, hidden, cell, normgrad_
 
-    def solver_step(self, x_k, obs, mask, hidden, cell,normgrad = 0.):
-        _, var_cost_grad= self.var_cost(x_k, obs, mask)
+    def solver_step(self, x_k, obs, mask, hidden, cell,normgrad = 0., _nth=None):
+        _, var_cost_grad= self.var_cost(x_k, obs, mask, _nth)
         if normgrad == 0. :
             normgrad_= torch.sqrt( torch.mean( var_cost_grad**2 + 0.))
         else:
@@ -420,9 +422,9 @@ class Solver_Grad_4DVarNN(nn.Module):
         x_k_plus_1 = x_k - grad
         return x_k_plus_1, hidden, cell, normgrad_
 
-    def var_cost(self , x, yobs, mask):
+    def var_cost(self , x, yobs, mask, _nth=None):
         dy = self.model_H(x,yobs,mask)
-        dx = x - self.phi_r(x)
+        dx = x - self.phi_r(x, _nth)
 
         loss = self.model_VarCost( dx , dy )
 
@@ -503,16 +505,16 @@ class FP_Solver(nn.Module):
         self.phi_r = phi_r
         with torch.no_grad():
             self.n_grad = int(n_iter_grad)
-           
+
 
     def forward(self, x, yobs, mask, *internal_state):
-        
+
         return self.solve(x, yobs, mask, *internal_state)
-        
+
 
     def solve(self, x_0, obs, mask, hidden=None, cell=None, normgrad_=None):
         x_k = torch.mul(x_0 ,1.)
-        for _ in range(self.n_grad): 
+        for _ in range(self.n_grad):
             x_k = self.solver_step(x_k, obs, mask, cell, normgrad_, )
             x_k = torch.mul(x_k ,1.)
         x_k = self.phi_r(x_k)
@@ -527,5 +529,5 @@ class FP_Solver(nn.Module):
         x_proj = self.phi_r(x_k) * unmeasured_mask
         #combine measured and interpolated data
         x_k_plus_1 = x_proj + y_obs
-    
+
         return x_k_plus_1

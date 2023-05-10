@@ -498,11 +498,17 @@ class Weight_Network(torch.nn.Module):
 
         self.n_phi = nb_phi
 
-    def forward(self, x_in):
+    #TODO need to make sure that this works for non-square windows
+    def forward(self, x_in, _nth=None):
+        if _nth and _nth <= 10:
+            return .5 * torch.ones_like(x_in)
+
         x_out  = self.avg_pool_conv(x_in)
-        #TODO need to make sure that this works for non-square windows
-        x_out = interpolate(x_out, (self.shape_data[2],self.shape_data[1]))
-        #x_out = interpolate(x_out, (self.shape_data[2],self.shape_data[1]), mode='bilinear', align_corners=True)
+        x_out = interpolate(
+            input=x_out,
+            size=(self.shape_data[2], self.shape_data[1]),
+            # mode='bicubic',
+        )
         return x_out
 
 
@@ -557,13 +563,13 @@ class Multi_Prior(torch.nn.Module):
 
         return results_dict, weights_dict
 
-    def forward(self, x_in):
+    def forward(self, x_in, _nth=None):
         x_out = torch.zeros_like(x_in).to(x_in)
 
         _weights = []
         for i in range(len(self.weights_list)):
             weight = self.weights_list[i].to(x_in)
-            _weights.append(weight(x_in))
+            _weights.append(weight(x_in, _nth))
         weight_normaliser = sum(_weights)
 
         for i in range(len(self.phi_list)):

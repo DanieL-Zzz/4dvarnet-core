@@ -296,7 +296,7 @@ class LitModelOI(LitModelAugstate):
             if self.model_name in ['lat_lon_multi_prior']:
                 outputs, hidden_new, cell_new, normgrad = self.model(state, obs, new_masks, latitude, longitude, *state_init[1:])
             else:
-                outputs, hidden_new, cell_new, normgrad = self.model(state, obs, new_masks, *state_init[1:])
+                outputs, hidden_new, cell_new, normgrad = self.model(state, obs, new_masks, self.current_epoch, *state_init[1:])
 
             if (phase == 'val') or (phase == 'test'):
                 outputs = outputs.detach()
