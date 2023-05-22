@@ -18,7 +18,7 @@ def get_4dvarnet_OI(hparams):
                 Phi_r_OI(hparams.shape_state[0], hparams.DimAE, hparams.dW, hparams.dW2, hparams.sS,
                     hparams.nbBlocks, hparams.dropout_phi_r, hparams.stochastic),
                 Model_H(hparams.shape_state[0]),
-                NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriodicBoundary,
+                NN_4DVar.model_GradUpdateLSTM(hparams.shape_state, hparams.UsePriofepodicBoundary,
                     hparams.dim_grad_solver, hparams.dropout),
                 hparams.norm_obs, hparams.norm_prior, hparams.shape_state, hparams.n_grad * hparams.n_fourdvar_iter)
 
@@ -80,6 +80,9 @@ class LitModelOI(LitModelAugstate):
         oi, inputs_Mask, inputs_obs, targets_GT, *_= batch
         losses, out, metrics = self(batch, phase='test')
         loss = losses[-1]
+
+        if torch.isnan(loss):
+            raise Exception(f'Loss is nan')
 
         if loss is not None and log_pref is not None:
             self.log(f'{log_pref}_loss', loss)
