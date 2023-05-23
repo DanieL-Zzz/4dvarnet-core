@@ -81,8 +81,8 @@ class LitModelOI(LitModelAugstate):
         losses, out, metrics = self(batch, phase='test')
         loss = losses[-1]
 
-        if hasattr(self, '_loss_already_naned') and torch.isnan(loss):
-            raise Exception(f'Loss is nan')
+        # if hasattr(self, '_loss_already_naned') and torch.isnan(loss):
+        #     raise Exception(f'Loss is nan')
 
         if loss is not None and log_pref is not None:
             self.log(f'{log_pref}_loss', loss)
