@@ -81,7 +81,7 @@ class LitModelOI(LitModelAugstate):
         losses, out, metrics = self(batch, phase='test')
         loss = losses[-1]
 
-        if torch.isnan(loss):
+        if hasattr(self, '_loss_already_naned') and torch.isnan(loss):
             raise Exception(f'Loss is nan')
 
         if loss is not None and log_pref is not None:
@@ -135,6 +135,17 @@ class LitModelOI(LitModelAugstate):
             'pred': _d(out),
         }
 
+    def training_epoch_end(self, outputs):
+        best_ckpt_path = self.trainer.checkpoint_callback.best_model_path
+        if len(best_ckpt_path) > 0:
+            print('>>> Loss:', outputs[-1]['loss'], 'Is nan:', torch.isnan(outputs[-1]['loss']))
+            if torch.isnan(outputs[-1]['loss']):
+                self.load_state_dict(torch.load(best_ckpt_path)['state_dict'])
+                self._loss_already_naned = True
+                print(
+                    f'>>> LAST CHECKPOINT ({best_ckpt_path}) LOADED BECAUSE '
+                    + 'LAST tr_loss IS NAN'
+                )
 
     def sla_diag(self, t_idx=3, log_pref='test'):
         path_save0 = self.logger.log_dir + f'/{log_pref}_maps.png'
