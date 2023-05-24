@@ -568,7 +568,7 @@ class Multi_Prior(torch.nn.Module):
         _weights = []
         for i in range(len(self.weights_list)):
             weight = self.weights_list[i].to(x_in)
-            _weights.append(weight(x_in))
+            _weights.append(weight(x_in.detach()))
         weight_normaliser = sum(_weights)
 
         for i in range(len(self.phi_list)):
