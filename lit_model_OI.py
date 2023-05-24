@@ -140,12 +140,17 @@ class LitModelOI(LitModelAugstate):
         if len(best_ckpt_path) > 0:
             print('>>> Loss:', outputs[-1]['loss'], 'Is nan:', torch.isnan(outputs[-1]['loss']))
             if torch.isnan(outputs[-1]['loss']):
-                self.load_state_dict(torch.load(best_ckpt_path)['state_dict'])
-                self._loss_already_naned = True
                 print(
                     f'>>> LAST CHECKPOINT ({best_ckpt_path}) LOADED BECAUSE '
                     + 'LAST tr_loss IS NAN'
                 )
+
+                last_checkpoint = torch.load(best_ckpt_path)
+                self.load_state_dict(last_checkpoint['state_dict'])
+                self.optimizers().load_state_dict(
+                    last_checkpoint['optimizer_states'][0]
+                )
+                self._loss_already_naned = True
 
     def sla_diag(self, t_idx=3, log_pref='test'):
         path_save0 = self.logger.log_dir + f'/{log_pref}_maps.png'
