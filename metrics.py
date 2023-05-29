@@ -172,8 +172,8 @@ def plot(ax, lon, lat, data, title, cmap, norm, extent=[-65, -55, 30, 40], gridd
         gl.ylabel_style = {'fontsize': 10}
     except Exception as e:
         import traceback
-        print(traceback.format_exc()) 
-        
+        print(traceback.format_exc())
+
 
 def gradient(img, order):
     """ calculate x, y gradient and magnitude """
@@ -375,14 +375,14 @@ def plot_multi_maps(multi_phi_xr_ds, resfile, idx =0, grad=False, crop=None, ort
         norm = colors.Normalize(vmin=vmin, vmax=vmax)
 
     extent = [np.min(lon),np.max(lon),np.min(lat),np.max(lat)]
-    
+
     extra_entries=4
 
     nrows = (len(pred_list) + extra_entries) // ncols + ((len(pred_list) +extra_entries) % ncols > 0)
 
     fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(16, 16), subplot_kw={'projection': ccrs.Mercator()})
     axs_ravel = axs.ravel()
-    
+
     if supervised:
         #plot oi, gt, and obs
         ax0 = axs_ravel[0]
@@ -407,7 +407,7 @@ def plot_multi_maps(multi_phi_xr_ds, resfile, idx =0, grad=False, crop=None, ort
                 plot(ax, lon, lat, gradient(result['data'], 2), result['name'], extent=extent, cmap=cm, norm=norm, colorbar=False)
             else:
                 plot(ax, lon, lat, result['data'], result['name'], extent=extent, cmap=cm, norm=norm, colorbar=False)
-                
+
     # Colorbar
     cbar_ax = fig.add_axes([0.1, 0.05, 0.8, 0.01])
     plt.subplots_adjust(wspace=0.1,hspace=0.1)
@@ -792,7 +792,7 @@ def get_psd_score(x_t, x, ref, with_fig=False):
 
 def rmse_based_scores(da_rec, da_ref):
     # boost swot rmse score
-    logging.info('     Compute RMSE-based scores...')
+    # logging.info('          Compute RMSE-based scores...')
 
     # RMSE(t) based score
     rmse_t = 1.0 - (((da_rec - da_ref)**2).mean(dim=('lon', 'lat')))**0.5/(((da_ref)**2).mean(dim=('lon', 'lat')))**0.5
@@ -810,16 +810,16 @@ def rmse_based_scores(da_rec, da_ref):
     leaderboard_rmse = 1.0 - (((da_rec - da_ref) ** 2).mean()) ** 0.5 / (
         ((da_ref) ** 2).mean()) ** 0.5
 
-    logging.info('          => Leaderboard SSH RMSE score = %s', np.round(leaderboard_rmse.values, 2))
-    logging.info('          Error variability = %s (temporal stability of the mapping error)', np.round(reconstruction_error_stability_metric, 2))
+    # logging.info('          => Leaderboard SSH RMSE score = %s', np.round(leaderboard_rmse.values, 2))
+    # logging.info('          Error variability = %s (temporal stability of the mapping error)', np.round(reconstruction_error_stability_metric, 2))
 
     return rmse_t, rmse_xy, np.round(leaderboard_rmse.values, 5), np.round(reconstruction_error_stability_metric, 5)
 
 
 def psd_based_scores(da_rec, da_ref):
-    
+
     # boost-swot-psd-score
-    logging.info('     Compute PSD-based scores...')
+    # logging.info('     Compute PSD-based scores...')
 
     # Compute error = SSH_reconstruction - SSH_true
     err = (da_rec - da_ref)
@@ -835,8 +835,8 @@ def psd_based_scores(da_rec, da_ref):
     signal['time'] = (signal.time - signal.time[0]) / np.timedelta64(1, 'D')
 
     # Compute PSD_err and PSD_signal
-    psd_err = xrft.power_spectrum(err, dim=['time', 'lon'], detrend='constant', window=True).compute()
-    psd_signal = xrft.power_spectrum(signal, dim=['time', 'lon'], detrend='constant', window=True).compute()
+    psd_err = xrft.power_spectrum(err, dim=['time', 'lon'], detrend='constant', window='hann').compute()
+    psd_signal = xrft.power_spectrum(signal, dim=['time', 'lon'], detrend='constant', window='hann').compute()
 
     # Averaged over latitude
     mean_psd_signal = psd_signal.mean(dim='lat').where((psd_signal.freq_lon > 0.) & (psd_signal.freq_time > 0), drop=True)
@@ -855,10 +855,10 @@ def psd_based_scores(da_rec, da_ref):
     shortest_spatial_wavelength_resolved = np.min(x05)
     shortest_temporal_wavelength_resolved = np.min(y05)
 
-    logging.info('          => Leaderboard Spectral score = %s (degree lon)',
-                 np.round(shortest_spatial_wavelength_resolved, 2))
-    logging.info('          => shortest temporal wavelength resolved = %s (days)',
-                 np.round(shortest_temporal_wavelength_resolved, 2))
+    # logging.info('          => Leaderboard Spectral score = %s (degree lon)',
+                #  np.round(shortest_spatial_wavelength_resolved, 2))
+    # logging.info('          => shortest temporal wavelength resolved = %s (days)',
+                #  np.round(shortest_temporal_wavelength_resolved, 2))
     psd_da = (1.0 - mean_psd_err/mean_psd_signal)
     psd_da.name = 'psd_score'
     return psd_da.to_dataset(), np.round(shortest_spatial_wavelength_resolved, 3), np.round(shortest_temporal_wavelength_resolved, 3)
