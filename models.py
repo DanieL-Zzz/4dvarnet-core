@@ -263,39 +263,31 @@ class ModelLR(torch.nn.Module):
 class DoubleConv(torch.nn.Module):
     """(convolution => [BN] => ReLU) * 2, used for UNet implentation"""
 
-    def __init__(self, in_channels, out_channels, mid_channels=None,rateDropout=0.,padding_mode='reflect',activation='relu'):
+    def __init__(
+        self, in_channels, out_channels, mid_channels=None, rateDropout=0.,
+        padding_mode='reflect', activation='relu',
+    ):
         super().__init__()
+
         if not mid_channels:
             mid_channels = out_channels
 
         if activation == 'relu':
-            self.double_conv = torch.nn.Sequential(
-                    torch.nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
-                    torch.nn.BatchNorm2d(mid_channels),
-                    torch.nn.ReLU(inplace=True),
-                    torch.nn.Dropout(rateDropout),
-                    torch.nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
-                    torch.nn.BatchNorm2d(out_channels),
-                    torch.nn.ReLU(inplace=True)
-                )
-        elif activation == 'tanh' :
-            self.double_conv = torch.nn.Sequential(
-                    torch.nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
-                    torch.nn.BatchNorm2d(mid_channels),
-                    torch.nn.ReLU(inplace=True),
-                    torch.nn.Dropout(rateDropout),
-                    torch.nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
-                    torch.nn.BatchNorm2d(out_channels),
-                    torch.nn.ReLU(inplace=True) )
-        elif activation == 'logsigmoid' :
-            self.double_conv = torch.nn.Sequential(
-                    torch.nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
-                    torch.nn.BatchNorm2d(mid_channels),
-                    torch.nn.LogSigmoid(inplace=True),
-                    torch.nn.Dropout(rateDropout),
-                    torch.nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
-                    torch.nn.BatchNorm2d(out_channels),
-                    torch.nn.LogSigmoid(inplace=True) )
+            _activation = torch.nn.ReLU
+        elif activation == 'logsigmoid':
+            _activation = torch.nn.LogSigmoid
+        else:
+            raise Exception('Unknown activation')
+
+        self.double_conv = torch.nn.Sequential(
+            torch.nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
+            torch.nn.BatchNorm2d(mid_channels),
+            _activation(inplace=True),
+            torch.nn.Dropout(rateDropout),
+            torch.nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
+            torch.nn.BatchNorm2d(out_channels),
+            _activation(inplace=True)
+        )
 
     def forward(self, x):
         return self.double_conv(x)
