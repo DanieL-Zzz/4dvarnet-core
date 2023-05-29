@@ -485,11 +485,16 @@ class Weight_Network(torch.nn.Module):
 
     def forward(self, x_in):
         x_out  = self.avg_pool_conv(x_in)
+
+        if torch.isnan(x_out).any():
+            print(x_out)
+            raise Exception('x_out contains nan')
+
         #TODO need to make sure that this works for non-square windows
         x_out = interpolate(
             input=x_out,
             size=(self.shape_data[2], self.shape_data[1]),
-            mode='bicubic',
+            # mode='bicubic',
         )
         return x_out
 
