@@ -281,11 +281,11 @@ class DoubleConv(torch.nn.Module):
 
         self.double_conv = torch.nn.Sequential(
             torch.nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
-            torch.nn.BatchNorm2d(mid_channels),
+            # torch.nn.BatchNorm2d(mid_channels),
             _activation(inplace=True),
             torch.nn.Dropout(rateDropout),
             torch.nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
-            torch.nn.BatchNorm2d(out_channels),
+            # torch.nn.BatchNorm2d(out_channels),
             _activation(inplace=True)
         )
 
@@ -475,15 +475,8 @@ class Weight_Network(torch.nn.Module):
 
         self.avg_pool_conv = torch.nn.Sequential(
             DoubleConv(in_channels, in_channels*8),
-            torch.nn.AvgPool2d(10),
-            torch.nn.BatchNorm2d(in_channels * 8),
-            # DoubleConv(in_channels * 2, in_channels * 4), #From DoubleConv from the UNet section
-            # torch.nn.AvgPool2d(2),
-            # torch.nn.BatchNorm2d(in_channels * 4),
-            # torch.nn.Conv2d(in_channels * 4, in_channels* 8, (2 * dw + 1, 2 * dw + 1), padding=dw),
-            # torch.nn.ReLU(True),
+            torch.nn.AvgPool2d(2),
             # torch.nn.BatchNorm2d(in_channels * 8),
-            # changes channels to number of days * number of priors
             torch.nn.Conv2d(in_channels * 8, shape_data[0], (2 * dw + 1, 2 * dw + 1), padding=dw),
             torch.nn.Sigmoid()
         )
