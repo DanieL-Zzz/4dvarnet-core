@@ -331,14 +331,14 @@ class Up(torch.nn.Module):
     Upscaling then DoubleConv.
     """
 
-    def __init__(self, in_channels, out_channels, bilinear=False):
+    def __init__(self, in_channels, out_channels, mode=None):
         super().__init__()
 
         # if bilinear, use the normal convolutions to reduce the number
         # of channels
-        if bilinear:
+        if mode:
             self.up = torch.nn.Upsample(
-                scale_factor=2, mode='bilinear', align_corners=True,
+                scale_factor=2, mode=mode, align_corners=True,
             )
             self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
         else:
@@ -382,26 +382,24 @@ class OutConv(torch.nn.Module):
 
 class UNet(torch.nn.Module):
     def __init__(
-        self, n_channels, n_classes, dropout_rate, bilinear=False,
-        shrink_factor = 2,
+        self, n_channels, n_classes, mode=None, shrink_factor=2,
     ):
         super(UNet, self).__init__()
 
         self.n_channels = n_channels
         self.n_classes = n_classes
-        self.bilinear = bilinear
-        factor = 2 if bilinear else 1
+        self.bilinear = mode
+        factor = 2 if mode else 1
 
-        # self.dropout = torch.nn.Dropout(dropout_rate)
         self.inc = DoubleConv(n_channels, 64 // shrink_factor)
         self.down1 = Down(64 // shrink_factor, 128 // shrink_factor)
         self.down2 = Down(128 // shrink_factor, 256 // shrink_factor)
         self.down3 = Down(256 // shrink_factor, 512 // shrink_factor)
         self.down4 = Down(512, 1024 // factor)
-        self.up1 = Up(1024, 512 // factor, bilinear)
-        self.up2 = Up(512 // shrink_factor, 256 // (shrink_factor * factor), bilinear)
-        self.up3 = Up(256 // shrink_factor, 128 // (shrink_factor * factor), bilinear)
-        self.up4 = Up(128 // shrink_factor, 64 // shrink_factor, bilinear)
+        self.up1 = Up(1024, 512 // factor, mode)
+        self.up2 = Up(512 // shrink_factor, 256 // (shrink_factor * factor), mode)
+        self.up3 = Up(256 // shrink_factor, 128 // (shrink_factor * factor), mode)
+        self.up4 = Up(128 // shrink_factor, 64 // shrink_factor, mode)
         self.outc = OutConv(64 // shrink_factor, n_classes)
 
     def forward(self, x):
