@@ -474,10 +474,7 @@ class Weight_Network(torch.nn.Module):
         self.shape_data = shape_data
 
         self.avg_pool_conv = torch.nn.Sequential(
-            DoubleConv(in_channels, in_channels*8),
-            torch.nn.AvgPool2d(2),
-            # torch.nn.BatchNorm2d(in_channels * 8),
-            torch.nn.Conv2d(in_channels * 8, shape_data[0], (2 * dw + 1, 2 * dw + 1), padding=dw),
+            DoubleConv(in_channels, shape_data[0]),
             torch.nn.Sigmoid()
         )
 
@@ -491,11 +488,11 @@ class Weight_Network(torch.nn.Module):
             raise Exception('x_out contains nan')
 
         #TODO need to make sure that this works for non-square windows
-        x_out = interpolate(
-            input=x_out,
-            size=(self.shape_data[2], self.shape_data[1]),
-            # mode='bicubic',
-        )
+        # x_out = interpolate(
+        #     input=x_out,
+        #     size=(self.shape_data[2], self.shape_data[1]),
+        #     # mode='bicubic',
+        # )
         return x_out
 
 
