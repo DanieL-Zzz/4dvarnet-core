@@ -50,7 +50,7 @@ params:
   - 0.001
   - 0.001
   - 0.001
-  lr_scheduler: null  # ${lr_scheduler}
+  lr_scheduler: ${lr_scheduler}
   n_fourdvar_iter: 3
   weight_decay: ???
   model: multi_prior
@@ -84,7 +84,7 @@ params:
   alpha_sr: 0.5
   alpha_lr: 0.5
   automatic_optimization: true
-  ckpt_name: modelCalSLAInterpGF-{epoch:02d}-{val_loss:.4f}
+  ckpt_name: mp-gf-{epoch:02d}-{val_loss:.4f}
   norm_obs: l2
   norm_prior: l2
   patch_weight:
@@ -144,8 +144,8 @@ datamodule:
   resolution: 1/20
   resize_factor: 1
   dl_kwargs:
-    batch_size: 2
-    num_workers: 2
+    batch_size: 4
+    num_workers: 4
   dataset_class:
     _target_: dataloading.FourDVarNetDataset
     _partial_: true
