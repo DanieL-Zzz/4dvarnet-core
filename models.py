@@ -373,7 +373,7 @@ class Up(torch.nn.Module):
 
 class OutConv(torch.nn.Module):
     def __init__(self, in_channels, out_channels):
-        super(OutConv, self).__init__()
+        super().__init__()
         self.conv = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1)
 
     def forward(self, x):
@@ -382,16 +382,20 @@ class OutConv(torch.nn.Module):
 
 class UNet(torch.nn.Module):
     def __init__(
-        self, n_channels, n_classes, mode=None, shrink_factor=2,
+        self, in_channels, out_channels, mode=None, shrink_factor=1,
     ):
-        super(UNet, self).__init__()
+        super().__init__()
 
-        self.n_channels = n_channels
-        self.n_classes = n_classes
+        self.in_channels = in_channels
+        self.out_channels = out_channels
         self.bilinear = mode
-        factor = 2 if mode else 1
 
-        self.inc = DoubleConv(n_channels, 64 // shrink_factor)
+        if mode in ('bilinear', 'bicubic'):
+            factor = 2
+        else:
+            factor = 1
+
+        self.inc = DoubleConv(in_channels, 64 // shrink_factor)
         self.down1 = Down(64 // shrink_factor, 128 // shrink_factor)
         self.down2 = Down(128 // shrink_factor, 256 // shrink_factor)
         self.down3 = Down(256 // shrink_factor, 512 // shrink_factor)
@@ -400,7 +404,9 @@ class UNet(torch.nn.Module):
         self.up2 = Up(512 // shrink_factor, 256 // (shrink_factor * factor), mode)
         self.up3 = Up(256 // shrink_factor, 128 // (shrink_factor * factor), mode)
         self.up4 = Up(128 // shrink_factor, 64 // shrink_factor, mode)
-        self.outc = OutConv(64 // shrink_factor, n_classes)
+        self.outc = OutConv(64 // shrink_factor, out_channels)
+
+        self.final_activation = torch.nn.Sigmoid()
 
     def forward(self, x):
         x1 = self.inc(x)
@@ -413,40 +419,50 @@ class UNet(torch.nn.Module):
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         logits = self.outc(x)
-        return logits
+
+        return self.final_activation(logits)
 
 
 # -----------------------------------------------------------------------------
 # Multiprior
 # -----------------------------------------------------------------------------
 
+def prod(iterable):
+    product = 1
+    for e in iterable:
+        product *= e
+    return product
+
+
 class Weight_Network(torch.nn.Module):
     def __init__(self, shape_data, nb_phi, dw, in_channels):
         super().__init__()
         self.shape_data = shape_data
-
-        self.avg_pool_conv = torch.nn.Sequential(
-            DoubleConv(in_channels, shape_data[0]),
-            torch.nn.Sigmoid()
-        )
-
-        self.unet = UNet()
-
         self.n_phi = nb_phi
 
+        # Note: in_channels = shape_data[0]
+        self.model = UNet(in_channels, shape_data[0], 'bicubic')
+
     def forward(self, x_in):
-        x_out  = self.avg_pool_conv(x_in)
+        if torch.isnan(x_in).any():
+            print()
+            print(
+                '>>> x_in contains nan',
+                torch.count_nonzero(torch.isnan(x_in)).item(),
+                prod(x_in.shape),
+            )
+
+        x_out = self.model(x_in)
 
         if torch.isnan(x_out).any():
-            print(x_out)
-            raise Exception('x_out contains nan')
+            print()
+            print(
+                '>>> x_out contains nan',
+                torch.count_nonzero(torch.isnan(x_out)).item(),
+                prod(x_out.shape),
+            )
+            raise Exception()
 
-        #TODO need to make sure that this works for non-square windows
-        # x_out = interpolate(
-        #     input=x_out,
-        #     size=(self.shape_data[2], self.shape_data[1]),
-        #     # mode='bicubic',
-        # )
         return x_out
 
 
@@ -506,7 +522,7 @@ class Multi_Prior(torch.nn.Module):
         _weights = []
         for i in range(len(self.weights_list)):
             weight = self.weights_list[i].to(x_in)
-            _weights.append(weight(x_in))
+            _weights.append(weight(x_in).detach())
         weight_normaliser = sum(_weights)
 
         for i in range(len(self.phi_list)):
