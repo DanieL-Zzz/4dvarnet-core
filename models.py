@@ -281,11 +281,11 @@ class DoubleConv(torch.nn.Module):
 
         self.double_conv = torch.nn.Sequential(
             torch.nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
-            # torch.nn.BatchNorm2d(mid_channels),
+            torch.nn.BatchNorm2d(mid_channels),
             _activation(inplace=True),
             torch.nn.Dropout(rateDropout),
             torch.nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False,padding_mode=padding_mode),
-            # torch.nn.BatchNorm2d(out_channels),
+            torch.nn.BatchNorm2d(out_channels),
             _activation(inplace=True)
         )
 
@@ -475,6 +475,9 @@ class Weight_Network(torch.nn.Module):
 
         self.avg_pool_conv = torch.nn.Sequential(
             DoubleConv(in_channels, shape_data[0]),
+            torch.nn.AvgPool2d(10),
+            torch.nn.BatchNorm2d(in_channels * 8),
+            torch.nn.Conv2d(in_channels * 8, shape_data[0], (2 * dw + 1, 2 * dw + 1), padding=dw),
             torch.nn.Sigmoid()
         )
 
@@ -485,14 +488,19 @@ class Weight_Network(torch.nn.Module):
 
         if torch.isnan(x_out).any():
             print(x_out)
-            raise Exception('x_out contains nan')
+            raise Exception('x_out contains nan (1)')
 
         #TODO need to make sure that this works for non-square windows
-        # x_out = interpolate(
-        #     input=x_out,
-        #     size=(self.shape_data[2], self.shape_data[1]),
-        #     # mode='bicubic',
-        # )
+        x_out = interpolate(
+            input=x_out,
+            size=(self.shape_data[2], self.shape_data[1]),
+            # mode='bicubic',
+        )
+
+        if torch.isnan(x_out).any():
+            print(x_out)
+            raise Exception('x_out contains nan (2)')
+
         return x_out
 
 
