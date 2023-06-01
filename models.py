@@ -474,16 +474,19 @@ class Weight_Network(torch.nn.Module):
         self.shape_data = shape_data
 
         self.avg_pool_conv = torch.nn.Sequential(
-            DoubleConv(in_channels, shape_data[0]),
+            DoubleConv(in_channels, in_channels*8),
             torch.nn.AvgPool2d(10),
-            torch.nn.BatchNorm2d(in_channels * 8),
-            torch.nn.Conv2d(in_channels * 8, shape_data[0], (2 * dw + 1, 2 * dw + 1), padding=dw),
+            torch.nn.BatchNorm2d(in_channels*8),
+            torch.nn.Conv2d(in_channels*8, shape_data[0], (2 * dw + 1, 2 * dw + 1), padding=dw),
             torch.nn.Sigmoid()
         )
 
         self.n_phi = nb_phi
 
     def forward(self, x_in):
+        if torch.isnan(x_in).any():
+            raise Exception('x_in contains nan (0)')
+
         x_out  = self.avg_pool_conv(x_in)
 
         if torch.isnan(x_out).any():
@@ -494,7 +497,7 @@ class Weight_Network(torch.nn.Module):
         x_out = interpolate(
             input=x_out,
             size=(self.shape_data[2], self.shape_data[1]),
-            # mode='bicubic',
+            mode='bicubic',
         )
 
         if torch.isnan(x_out).any():
