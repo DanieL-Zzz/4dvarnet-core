@@ -144,8 +144,8 @@ datamodule:
   resolution: 1/20
   resize_factor: 1
   dl_kwargs:
-    batch_size: 4
-    num_workers: 4
+    batch_size: 6
+    num_workers: 8
   dataset_class:
     _target_: dataloading.FourDVarNetDataset
     _partial_: true
