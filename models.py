@@ -382,7 +382,7 @@ class OutConv(torch.nn.Module):
 
 class UNet(torch.nn.Module):
     def __init__(
-        self, in_channels, out_channels, mode=None, shrink_factor=1,
+        self, in_channels, out_channels, mode=None, shrink_factor=2,
     ):
         super().__init__()
 
@@ -399,8 +399,8 @@ class UNet(torch.nn.Module):
         self.down1 = Down(64 // shrink_factor, 128 // shrink_factor)
         self.down2 = Down(128 // shrink_factor, 256 // shrink_factor)
         self.down3 = Down(256 // shrink_factor, 512 // shrink_factor)
-        self.down4 = Down(512, 1024 // factor)
-        self.up1 = Up(1024, 512 // factor, mode)
+        self.down4 = Down(512 // shrink_factor, 1024 // (shrink_factor * factor))
+        self.up1 = Up(1024 // shrink_factor, 512 // (shrink_factor * factor), mode)
         self.up2 = Up(512 // shrink_factor, 256 // (shrink_factor * factor), mode)
         self.up3 = Up(256 // shrink_factor, 128 // (shrink_factor * factor), mode)
         self.up4 = Up(128 // shrink_factor, 64 // shrink_factor, mode)
