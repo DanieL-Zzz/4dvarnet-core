@@ -474,10 +474,7 @@ class Weight_Network(torch.nn.Module):
         self.shape_data = shape_data
 
         self.avg_pool_conv = torch.nn.Sequential(
-            DoubleConv(in_channels, in_channels*8),
-            torch.nn.AvgPool2d(10),
-            torch.nn.BatchNorm2d(in_channels*8),
-            torch.nn.Conv2d(in_channels*8, shape_data[0], (2 * dw + 1, 2 * dw + 1), padding=dw),
+            DoubleConv(in_channels, 1),
             torch.nn.Sigmoid()
         )
 
@@ -553,7 +550,9 @@ class Multi_Prior(torch.nn.Module):
                 phi_out = phi_r(x_in).detach().to('cpu')
                 weight_out = _weights[i] / weight_normaliser
 
-                weights_dict[f'phi{i}_weight'] = weight_out
+                weights_dict[f'phi{i}_weight'] = weight_out.repeat(
+                    1, phi_out.shape[1], 1, 1,  # repeat channel
+                )
                 results_dict[f'phi{i}_out'] =  phi_out
 
         return results_dict, weights_dict

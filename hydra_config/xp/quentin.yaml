@@ -3,7 +3,7 @@
 entrypoint:
   # _target_: hydra_main.FourDVarNetHydraRunner.train
   # ckpt_path: null
-  max_epochs: 180
+  max_epochs: 200
   progress_bar_refresh_rate: 5
   limit_train_batches: 1.0
 xp_name: QOIMP
@@ -145,7 +145,7 @@ datamodule:
   resize_factor: 1
   dl_kwargs:
     batch_size: 2
-    num_workers: 8
+    num_workers: 4
   dataset_class:
     _target_: dataloading.FourDVarNetDataset
     _partial_: true
