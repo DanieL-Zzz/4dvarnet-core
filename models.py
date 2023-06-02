@@ -472,37 +472,27 @@ class Weight_Network(torch.nn.Module):
     def __init__(self, shape_data, nb_phi, dw, in_channels):
         super().__init__()
         self.shape_data = shape_data
+        self.n_phi = nb_phi
 
-        self.avg_pool_conv = torch.nn.Sequential(
-            DoubleConv(in_channels, in_channels*8),
-            torch.nn.AvgPool2d(10),
-            torch.nn.BatchNorm2d(in_channels*8),
-            torch.nn.Conv2d(in_channels*8, shape_data[0], (2 * dw + 1, 2 * dw + 1), padding=dw),
+        self.layers = torch.nn.Sequential(
+            torch.nn.Conv2d(
+                in_channels,
+                in_channels,
+                kernel_size=2*dw + 1,
+                padding=dw,
+            ),
             torch.nn.Sigmoid()
         )
-
-        self.n_phi = nb_phi
 
     def forward(self, x_in):
         if torch.isnan(x_in).any():
             raise Exception('x_in contains nan (0)')
 
-        x_out  = self.avg_pool_conv(x_in)
+        x_out  = self.layers(x_in)
 
         if torch.isnan(x_out).any():
             print(x_out)
             raise Exception('x_out contains nan (1)')
-
-        #TODO need to make sure that this works for non-square windows
-        x_out = interpolate(
-            input=x_out,
-            size=(self.shape_data[2], self.shape_data[1]),
-            mode='bicubic',
-        )
-
-        if torch.isnan(x_out).any():
-            print(x_out)
-            raise Exception('x_out contains nan (2)')
 
         return x_out
 
