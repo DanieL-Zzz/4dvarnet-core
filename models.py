@@ -168,7 +168,10 @@ class Phi_r_OI(torch.nn.Module):
             torch.normal(mean, std, size=last_layers_weight.shape)
         )
 
-    def forward(self, x):
+    def forward(self, x, i):
+        if i > 0:
+            x = interpolate(x, scale_factor=.5, mode='bicubic')
+
         white = True
         if self.stochastic == True:
             # pure white noise
@@ -178,6 +181,10 @@ class Phi_r_OI(torch.nn.Module):
         else:
             x = self.encoder(x)
         x = self.decoder(x)
+
+        if i > 0:
+            x = interpolate(x, scale_factor=2, mode='bicubic')
+
         return x
 
 class Model_H(torch.nn.Module):
@@ -484,7 +491,10 @@ class Weight_Network(torch.nn.Module):
             torch.nn.Sigmoid()
         )
 
-    def forward(self, x_in):
+    def forward(self, x_in, i):
+        if i > 0:
+            x_in = interpolate(x_in, scale_factor=.5, mode='bicubic')
+
         if torch.isnan(x_in).any():
             raise Exception('x_in contains nan (0)')
 
@@ -494,6 +504,8 @@ class Weight_Network(torch.nn.Module):
             print(x_out)
             raise Exception('x_out contains nan (1)')
 
+        if i > 0:
+            x_out = interpolate(x_out, scale_factor=2, mode='bicubic')
         return x_out
 
 
@@ -533,14 +545,14 @@ class Multi_Prior(torch.nn.Module):
             _weights = []
             for i in range(len(self.weights_list)):
                 weight = self.weights_list[i].to(x_in)
-                _weights.append(weight(x_in).detach().to('cpu'))
+                _weights.append(weight(x_in, i).detach().to('cpu'))
             weight_normaliser = sum(_weights).detach().to('cpu')
 
             for i in range(len(self.phi_list)):
                 phi_r = self.phi_list[i].to(x_in)
                 weight = self.weights_list[i].to(x_in)
 
-                phi_out = phi_r(x_in).detach().to('cpu')
+                phi_out = phi_r(x_in, i).detach().to('cpu')
                 weight_out = _weights[i] / weight_normaliser
 
                 weights_dict[f'phi{i}_weight'] = weight_out
@@ -554,13 +566,13 @@ class Multi_Prior(torch.nn.Module):
         _weights = []
         for i in range(len(self.weights_list)):
             weight = self.weights_list[i].to(x_in)
-            _weights.append(weight(x_in))
+            _weights.append(weight(x_in, i))
         weight_normaliser = sum(_weights)
 
         for i in range(len(self.phi_list)):
             phi_r = self.phi_list[i].to(x_in)
 
-            phi_out = phi_r(x_in)
+            phi_out = phi_r(x_in, i)
             weight_out = _weights[i] / weight_normaliser
 
             x_out = torch.add(x_out, torch.mul(weight_out, phi_out))
