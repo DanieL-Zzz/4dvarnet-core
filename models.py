@@ -530,37 +530,59 @@ class Multi_Prior(torch.nn.Module):
             results_dict = {}
             weights_dict = {}
 
+            phi_outs = []
+            for i in range(len(self.phi_list)):
+                phi_r = self.phi_list[i].to(x_in)
+
+                _input = x_in
+                if i > 0:
+                    _input -= phi_outs[i-1]
+
+                phi_outs.append(phi_r(_input).detach().to('cpu'))
+
             _weights = []
             for i in range(len(self.weights_list)):
                 weight = self.weights_list[i].to(x_in)
-                _weights.append(weight(x_in).detach().to('cpu'))
+
+                _input = x_in
+                if i > 0:
+                    _input -= phi_outs[i-1]
+
+                _weights.append(weight(_input).detach().to('cpu'))
             weight_normaliser = sum(_weights).detach().to('cpu')
 
             for i in range(len(self.phi_list)):
-                phi_r = self.phi_list[i].to(x_in)
-                weight = self.weights_list[i].to(x_in)
-
-                phi_out = phi_r(x_in).detach().to('cpu')
-                weight_out = _weights[i] / weight_normaliser
-
-                weights_dict[f'phi{i}_weight'] = weight_out
-                results_dict[f'phi{i}_out'] =  phi_out
+                weights_dict[f'phi{i}_weight'] = _weights[i] / weight_normaliser
+                results_dict[f'phi{i}_out'] = phi_outs[i]
 
         return results_dict, weights_dict
 
     def forward(self, x_in):
         x_out = torch.zeros_like(x_in).to(x_in)
 
-        _weights = []
-        for i in range(len(self.weights_list)):
-            weight = self.weights_list[i].to(x_in)
-            _weights.append(weight(x_in))
-        weight_normaliser = sum(_weights)
-
+        phi_outs = []
         for i in range(len(self.phi_list)):
             phi_r = self.phi_list[i].to(x_in)
 
-            phi_out = phi_r(x_in)
+            _input = x_in
+            if i > 0:
+                _input -= phi_outs[i-1]
+
+            phi_outs.append(phi_r(_input))
+
+        _weights = []
+        for i in range(len(self.weights_list)):
+            weight = self.weights_list[i].to(x_in)
+
+            _input = x_in
+            if i > 0:
+                _input -= phi_outs[i-1]
+
+            _weights.append(weight(_input))
+        weight_normaliser = sum(_weights)
+
+        for i in range(len(self.phi_list)):
+            phi_out = phi_outs[i]
             weight_out = _weights[i] / weight_normaliser
 
             x_out = torch.add(x_out, torch.mul(weight_out, phi_out))
