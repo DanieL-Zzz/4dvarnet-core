@@ -467,7 +467,16 @@ class Encoder_OI_linear(torch.nn.Module):
         return x
 
 
-#MULTI PRIOR SECTION
+# ---------------------------------------------------------------------
+# Multiprior
+# ---------------------------------------------------------------------
+
+def _change_input(x, i, _list):
+    if i > 0:
+        return x - _list[i-1].to(x)  # phi_n(x - phi_{n-1}(x))
+    return x
+
+
 class Weight_Network(torch.nn.Module):
     def __init__(self, shape_data, nb_phi, dw, in_channels):
         super().__init__()
@@ -497,7 +506,6 @@ class Weight_Network(torch.nn.Module):
         return x_out
 
 
-#Multi prior that uses the state to calculate the weights
 class Multi_Prior(torch.nn.Module):
     def __init__(
         self, shape_data, DimAE, dw, dw2, ss, nb_blocks, rateDr,
@@ -522,48 +530,64 @@ class Multi_Prior(torch.nn.Module):
         self.nb_phi = nb_phi
         self.shape_data = shape_data
 
-    #gives a list of outputs for the phis for validation step
+    @torch.no_grad()
     def get_intermediate_results(self, x_in):
-        with torch.no_grad():
-            x_in = x_in.to(x_in)
+        """
+        Return the list of output weights and priors in validation step.
+        """
+        results_dict = {}
+        weights_dict = {}
 
-            results_dict = {}
-            weights_dict = {}
+        n_priors = len(self.phi_list)
 
-            _weights = []
-            for i in range(len(self.weights_list)):
-                weight = self.weights_list[i].to(x_in)
-                _weights.append(weight(x_in).detach().to('cpu'))
-            weight_normaliser = sum(_weights).detach().to('cpu')
+        # 1. Compute priors
+        _priors = []
+        for i in range(n_priors):
+            prior = self.phi_list[i].to(x_in)
+            _priors.append(
+                prior(_change_input(x_in, i, _priors)).detach().to('cpu')
+            )
 
-            for i in range(len(self.phi_list)):
-                phi_r = self.phi_list[i].to(x_in)
-                weight = self.weights_list[i].to(x_in)
+        # 2. Compute weights
+        _weights = []
+        for i in range(n_priors):
+            weight = self.weights_list[i].to(x_in)
+            _weights.append(weight(_change_input(x_in, i, _weights)).detach().to('cpu'))
+        norm_weight = sum(_weights).detach().to('cpu')
 
-                phi_out = phi_r(x_in).detach().to('cpu')
-                weight_out = _weights[i] / weight_normaliser
-
-                weights_dict[f'phi{i}_weight'] = weight_out
-                results_dict[f'phi{i}_out'] =  phi_out
+        # 3. Store outputs in dictionaries
+        for i in range(n_priors):
+            weights_dict[f'phi{i}_weight'] = _weights[i] / norm_weight
+            results_dict[f'phi{i}_out'] = _priors[i]
 
         return results_dict, weights_dict
 
     def forward(self, x_in):
-        x_out = torch.zeros_like(x_in).to(x_in)
+        n_priors = len(self.phi_list)
 
+        # 1. Compute priors
+        _priors = []
+        for i in range(n_priors):
+            prior = self.phi_list[i].to(x_in)
+            _priors.append(prior(_change_input(x_in, i, _priors)))
+
+        # 2. Compute weights
         _weights = []
-        for i in range(len(self.weights_list)):
+        for i in range(n_priors):
             weight = self.weights_list[i].to(x_in)
-            _weights.append(weight(x_in))
-        weight_normaliser = sum(_weights)
+            _weights.append(weight(_change_input(x_in, i, _weights)))
+        norm_weight = sum(_weights)
 
-        for i in range(len(self.phi_list)):
-            phi_r = self.phi_list[i].to(x_in)
-
-            phi_out = phi_r(x_in)
-            weight_out = _weights[i] / weight_normaliser
-
-            x_out = torch.add(x_out, torch.mul(weight_out, phi_out))
+        # 3. Store outputs in dictionaries
+        x_out = torch.zeros_like(x_in).to(x_in)
+        for i in range(n_priors):
+            x_out = torch.add(
+                x_out,
+                torch.mul(
+                    _weights[i] / norm_weight,
+                    _priors[i],
+                ),
+            )
 
         return x_out
 
