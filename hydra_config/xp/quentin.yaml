@@ -1,9 +1,7 @@
 # @package _global_
 
 entrypoint:
-  # _target_: hydra_main.FourDVarNetHydraRunner.train
-  # ckpt_path: null
-  max_epochs: 200
+  max_epochs: 400
   progress_bar_refresh_rate: 5
   limit_train_batches: 1.0
 xp_name: QOIMP
@@ -55,7 +53,7 @@ params:
   weight_decay: ???
   model: multi_prior
   sst: false
-  val_diag_freq: 1
+  val_diag_freq: 5
   n_grad: 5
   dT: 24
   aug_state: false
@@ -84,7 +82,7 @@ params:
   alpha_sr: 0.5
   alpha_lr: 0.5
   automatic_optimization: true
-  ckpt_name: mp-gf-{epoch:02d}-{val_loss:.4f}
+  ckpt_name: mp-bigger-gf-{epoch:02d}-{val_loss:.4f}
   norm_obs: l2
   norm_prior: l2
   patch_weight:
@@ -105,7 +103,7 @@ params:
       _target_: builtins.slice
       _args_:
       - -65.0
-      - -55.0
+      - -45.0
   k_n_grad: 3
   padding_mode: reflect
 lit_mod_cls: lit_model_OI.LitModelOI
@@ -159,7 +157,7 @@ datamodule:
       _target_: builtins.slice
       _args_:
       - -66.0
-      - -54.0
+      - -44.0
 logger:
   _target_: pytorch_lightning.loggers.TensorBoardLogger
   save_dir: .
