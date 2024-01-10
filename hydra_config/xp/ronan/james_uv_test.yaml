@@ -2,15 +2,15 @@
 
 # Ici tu peux surcharger les parties de la config que tu veux sans impacter les autres, par exemple:
 
-# entrypoint:
+entrypoint:
 #  weights_save_path: '/gpfsscratch/rech/yrf/ulh44ct/NATL60_GF/UVNATL60_GFMMexp240x240_ChckPt-wSST-hydra-exp/'
 
 # ####################
 # Models considered in JAMES submission
-#   ckpt_path: '../TrainedModels/modelUVwSSTGF-unet1_050-augdata-augstate-dT07-sstobs-nolinear-tanh-bn_20-nowgeo-nostrain-grad_05_03_150-epoch=84-val_loss=0.9944.ckpt'
-#   ckpt_path: '../TrainedModels/modelUVwSSTGF-unet1_050-augdata-dws02-augstate-dT07-nowgeo-nostrain-grad_05_03_150-epoch=05-val_loss=2.4105.ckpt'
-#   ckpt_path: '../TrainedModels/modelUVwSSTGF-unet1_050-augdata-DirectInv-dT07-nostrain-epoch=13-val_loss=4.0956.ckpt'
-#   ckpt_path: '../TrainedModels/modelUVwSSTGF-unet1_050-augdata-DirectInv-wSST-dT07-nostrain-epoch=62-val_loss=2.5038.ckpt'
+  ckpt_path: '../TrainedModels/modelUVwSSTGF-unet1_050-augdata-augstate-dT07-sstobs-nolinear-tanh-bn_20-nowgeo-nostrain-grad_05_03_150-epoch=84-val_loss=0.9944.ckpt'
+  # ckpt_path: '../TrainedModels/modelUVwSSTGF-unet1_050-augdata-dws02-augstate-dT07-nowgeo-nostrain-grad_05_03_150-epoch=05-val_loss=2.4105.ckpt'
+  # ckpt_path: '../TrainedModels/modelUVwSSTGF-unet1_050-augdata-DirectInv-dT07-nostrain-epoch=13-val_loss=4.0956.ckpt'
+  # ckpt_path: '../TrainedModels/modelUVwSSTGF-unet1_050-augdata-DirectInv-wSST-dT07-nostrain-epoch=62-val_loss=2.5038.ckpt'
 params:
   flag_update_training_config: False # True #
   sst_model: 'nolinear-tanh-bn'  #'nolinear-tanh-bn-att'  #'linear-bn'#''linear'#
@@ -47,7 +47,7 @@ defaults:
 #  - /xp/xp_aug/aug/with_aug_state_uv
   - /xp/xp_aug/aug/with_mm_aug_state_uv
   - /xp/xp_aug/dl/d240_p240x5_s240x1
-  - /xp/xp_aug/sst/without_sst
+  - /xp/xp_aug/sst/with_sst
   - /xp/xp_aug/loss/map
   - /xp/xp_aug/train_strat/const_lr_ngrad_5_3cas
   - _self_
